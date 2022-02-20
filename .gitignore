@@ -1,3 +1,4 @@
 build
 main.hex
 main.elf
+atmega8.map
