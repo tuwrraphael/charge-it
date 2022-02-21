@@ -28,4 +28,4 @@ main.hex: main.elf
 	avr-objcopy -O ihex -j .text -j .data main.elf main.hex
 
 flash: main.hex
-	avrdude -p atmega8 -c usbasp -U flash:w:main.hex
+	avrdude -D -p atmega8 -c usbasp -U flash:w:main.hex

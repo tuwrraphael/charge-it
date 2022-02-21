@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include "uart_debug.h"
-#define BAUD 9600UL
+#define BAUD 115200UL
 #include <util/setbaud.h>
 
 void uart_debug_init()
@@ -34,19 +34,10 @@ static void put_flag(boolean_t b) {
     }
 }
 
-static void put_uint8(uint8_t val) {
-    char buf[3];
-    memset(buf, ' ', 3);
-    itoa(val, buf, 10);
-    uart_putchar(buf[0]);
-    uart_putchar(buf[1]);
-    uart_putchar(buf[2]);
-}
-
 static void put_uint16(uint16_t nr){
     char buf[5];
     memset(buf, ' ', 5);
-    itoa(nr, buf, 10);
+    utoa(nr, buf, 10);
     uart_putchar(buf[0]);
     uart_putchar(buf[1]);
     uart_putchar(buf[2]);
@@ -71,10 +62,12 @@ void debug_appstate(appstate_t *appstate)
     }  
     put_flag(appstate->discharge_a);
     put_flag(appstate->discharge_b);
-    put_flag(appstate->light_requested);
+    put_flag(appstate->dynamo_shutoff);
+    uart_putchar(' ');
     put_uint16(appstate->charge_a_value);
     put_uint16(appstate->charge_b_value);
-    put_uint8(appstate->dynamo_frequency);
+    put_uint16(appstate->max_charge_value);
+    put_uint16(appstate->dynamo_frequency);
     uart_putchar('\r');
     uart_putchar('\n');
 #endif

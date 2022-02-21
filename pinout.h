@@ -8,10 +8,11 @@
 
 #define REG5V_OFF_PIN (0)
 #define LED_BACK_OFF_PIN (1)
-#define LED_FRONT_ON_PIN (6)
+#define LED_FRONT_OFF_PIN (6)
 #define LED_LIGHT_CHARGE_PIN (7)
 
 #define DYNAMO_OFF_PIN (2)
+#define SENSE_DYNAMO_PIN (0)
 
 #define CHARGE_A_VALUE_PIN (0)
 #define CHARGE_B_VALUE_PIN (1)
