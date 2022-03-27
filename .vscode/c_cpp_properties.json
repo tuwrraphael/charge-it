@@ -12,7 +12,9 @@
             "intelliSenseMode": "linux-clang-x64",
             "compilerArgs": [
                 "-mmcu=atmega8a",
-                "-DF_CPU=12000000UL"
+                "-DF_CPU=12000000UL",
+                "-DDEBUGUART",
+                "-DLABBENCH"
             ]
         }
     ],

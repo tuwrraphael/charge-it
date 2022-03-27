@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamo Debug</title>
+    <style>
+        body {
+            width: 800px;
+        }
+    </style>
+</head>
+
+<body>
+    <button id="start">Verbinden</button>
+    <div>
+        <label>Charge A:</label>
+        <progress id="chargeA" value="0" max="100"></progress>
+    </div>
+    <div>
+        <label>Charge B:</label>
+        <progress id="chargeB" value="0" max="100"></progress>
+    </div>
+    <div>
+        <label>Discharge A:</label>
+        <progress id="dischargeA" value="0" max="100"></progress>
+    </div>
+    <div>
+        <label>Discharge B:</label>
+        <progress id="dischargeB" value="0" max="100"></progress>
+    </div>
+    <div>
+        <label>Charge None:</label>
+        <progress id="dischargeNone" value="0" max="100"></progress>
+    </div>
+    <canvas id="myChart" width="400" height="400"></canvas>
+
+
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.5.1/dist/chart.js"></script>
+    <script>
+        let startButton = document.getElementById("start");
+        let dataOutput = document.getElementById("dataOutput")
+        let data = [];
+
+        navigator.serial.getPorts().then((ports) => {
+            // Initialize the list of available ports with `ports` on page load.
+            console.log(ports)
+        });
+        startButton.addEventListener('click', async () => {
+            navigator.serial.requestPort({ filters: [] }).then(async (port) => {
+                console.log("port: " + port)
+                await port.open({ baudRate: 115200 });
+
+
+                while (port.readable) {
+                    const textDecoder = new TextDecoderStream();
+                    const readableStreamClosed = port.readable.pipeTo(textDecoder.writable);
+                    const reader = textDecoder.readable
+                        .pipeThrough(new TransformStream(new LineBreakTransformer()))
+                        .getReader();
+
+                    try {
+                        while (true) {
+                            let { value, done } = await reader.read();
+                            if (done) {
+                                console.log("|reader| has been canceled.");
+                                break;
+                            }
+                            document.getElementById("chargeA").value = value[0];
+                            document.getElementById("chargeB").value = value[1];
+                            document.getElementById("dischargeNone").value = value[2];
+                            document.getElementById("dischargeA").value = value[3];
+                            document.getElementById("dischargeB").value = value[4];
+                            // let timestamp = new Intl.DateTimeFormat([], { hour: 'numeric', minute: 'numeric', second: 'numeric' }).format(new Date());
+                            // data.push(timestamp + ',' + value + '\n');
+                            // dataOutput.innerText = data.slice(Math.max(0, data.length - 11)).join('');
+                            updateChart(value);
+                        }
+                    } catch (error) {
+                        console.log(error)
+                    } finally {
+                        reader.releaseLock();
+                    }
+                }
+            }).catch((error) => {
+                console.log(error);
+            });
+        });
+
+
+
+        class LineBreakTransformer {
+            constructor() {
+                // A container for holding stream data until a new line.
+                this.chunks = "";
+            }
+
+            transform(chunk, controller) {
+                // Append new chunks to existing chunks.
+                this.chunks += chunk;
+                // For each line breaks in chunks, send the parsed lines out.
+                const lines = this.chunks.split("\r\n");
+                this.chunks = lines.pop();
+                lines.forEach((line) => {
+                    let values = line.split(/\s+/).filter(v => v.replace("\x00", "").length > 0).map(v => parseFloat(v.replace("\x00", "")));
+                    if (values.some(v => isNaN(v))) {
+                        console.log("NaN: " + line);
+                    } else {
+                        controller.enqueue(values);
+                    }
+                });
+            }
+
+            flush(controller) {
+                // When the stream is closed, flush any remaining chunks out.
+                controller.enqueue(this.chunks);
+            }
+        }
+
+
+        const ctx = document.getElementById('myChart').getContext('2d');
+        const myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: "ChargeA Min",
+                    borderColor: "#00F",
+                    backgroundColor: "#00F",
+                    data: []
+                }, {
+                    label: "ChargeA Max",
+                    borderColor: "#000077",
+                    backgroundColor: "#000077",
+                    data: []
+                }, {
+                    label: "ChargeB Min",
+                    borderColor: "#FF0000",
+                    backgroundColor: "#FF0000",
+                    data: []
+                }, {
+                    label: "ChargeB Max",
+                    borderColor: "#770000",
+                    backgroundColor: "#770000",
+                    data: []
+                }, {
+                    label: "Min Level",
+                    borderColor: "#00FF00",
+                    backgroundColor: "#00FF00",
+                    data: []
+                },
+                {
+                    label: "Max Level",
+                    borderColor: "#00FF00",
+                    backgroundColor: "#00FF00",
+                    data: []
+                }],
+                labels: []
+            },
+            options: {
+                // scales: {
+                //     y: {
+                //         beginAtZero: true
+                //     }
+                // },
+                animation: {
+                    duration: 0, // general animation time
+                },
+                hover: {
+                    animationDuration: 0, // duration of animations when hovering an item
+                },
+                responsiveAnimationDuration: 0, // animation duration after a resize
+            }
+        });
+        function updateChart(value) {
+
+            myChart.data.datasets[0].data.push(value[7] *(13*2.56)/(1023*3));
+            myChart.data.datasets[1].data.push(value[6]*(13*2.56)/(1023*3));
+            myChart.data.datasets[2].data.push(value[9]*(13*2.56)/(1023*3));
+            myChart.data.datasets[3].data.push(value[8]*(13*2.56)/(1023*3));
+            myChart.data.datasets[4].data.push(value[5]*(13*2.56)/(1023*3));
+            myChart.data.datasets[5].data.push(value[5]*(13*2.56)/(1023*3) + 0.5);
+            var length = myChart.data.labels.length;
+            for (let d of myChart.data.datasets) {
+                d.data = d.data.slice(Math.max(0, length - 100 + 1));
+            }
+
+            myChart.data.labels.push((myChart.data.labels[myChart.data.labels.length - 1] || 0) + 1);
+            myChart.data.labels = myChart.data.labels.slice(Math.max(0, length - 100 + 1));
+            myChart.update();
+        }
+    </script>
+</body>
+
+</html>

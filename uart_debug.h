@@ -7,4 +7,8 @@ void uart_debug_init();
 
 void debug_appstate(appstate_t *appstate);
 
+void debug_summary(appstate_t *appstate);
+
+void debug_powersave(appstate_t *appstate);
+
 #endif

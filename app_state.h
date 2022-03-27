@@ -3,13 +3,23 @@
 
 #include "boolean.h"
 
-typedef enum {
+typedef enum
+{
     CHARGE_NONE,
     CHARGE_A,
     CHARGE_B
 } charge_mode_t;
 
-typedef struct {
+typedef enum
+{
+    DRIVING_STATE_STARTING,
+    DRIVING_STATE_DRIVING,
+    DRIVING_STATE_STOPPED,
+    DRIVING_STATE_STOPPING
+} driving_state_t;
+
+typedef struct
+{
     charge_mode_t charge_mode;
     boolean_t discharge_a;
     boolean_t discharge_b;
@@ -17,8 +27,21 @@ typedef struct {
     boolean_t dynamo_shutoff;
     uint16_t charge_a_value;
     uint16_t charge_b_value;
-    uint16_t max_charge_value;
+    uint16_t max_discharge_value;
     uint16_t dynamo_frequency;
+
+    driving_state_t driving_state;
+    uint16_t avg;
+    boolean_t is_braking;
+
+    uint16_t driving_state_timing;
+
+    uint8_t cycle_count;
+    uint8_t back_off;
+    uint16_t max_charge_a_value;
+    uint16_t max_charge_b_value;
+    uint8_t turn_on_limit_us;
+
 } appstate_t;
 
 #endif
