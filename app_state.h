@@ -31,8 +31,9 @@ typedef struct
     uint16_t dynamo_frequency;
 
     driving_state_t driving_state;
-    uint16_t avg;
-    boolean_t is_braking;
+    int16_t diff;
+    int16_t avg;
+    uint16_t is_braking;
 
     uint16_t driving_state_timing;
 
@@ -40,7 +41,7 @@ typedef struct
     uint8_t back_off;
     uint16_t max_charge_a_value;
     uint16_t max_charge_b_value;
-    uint8_t turn_on_limit_us;
+    uint8_t turn_on_limit;
 
 } appstate_t;
 

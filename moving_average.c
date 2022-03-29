@@ -5,12 +5,19 @@ void moving_average_init(moving_average_t *moving_average)
 {
     memset(moving_average, 0, sizeof(moving_average_t));
 }
-void moving_average_add(moving_average_t *moving_average, uint16_t data)
+void moving_average_add(moving_average_t *moving_average, int16_t data)
 {
-    moving_average->count = (moving_average->count >= MOVING_AVERAGE_SIZE) ?  moving_average->count  : moving_average->count + 1;
+    moving_average->count = (moving_average->count >= MOVING_AVERAGE_SIZE) ? moving_average->count : moving_average->count + 1;
     moving_average->sum -= moving_average->data[moving_average->index];
     moving_average->data[moving_average->index] = data;
     moving_average->sum += data;
     moving_average->index = (moving_average->index + 1) % MOVING_AVERAGE_SIZE;
-    moving_average->avg = moving_average->sum / moving_average->count;
+    if (moving_average->count < MOVING_AVERAGE_SIZE)
+    {
+        moving_average->avg = 0;
+    }
+    else
+    {
+        moving_average->avg = moving_average->sum / MOVING_AVERAGE_SIZE;
+    }
 }

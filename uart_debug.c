@@ -81,6 +81,19 @@ static void put_uint16(uint16_t nr)
     uart_putchar(buf[4]);
 }
 
+static void put_int16(int16_t nr)
+{
+    char buf[6];
+    memset(buf, ' ', 6);
+    itoa(nr, buf, 10);
+    uart_putchar(buf[0]);
+    uart_putchar(buf[1]);
+    uart_putchar(buf[2]);
+    uart_putchar(buf[3]);
+    uart_putchar(buf[4]);
+    uart_putchar(buf[5]);
+}
+
 static void put_uint8(uint8_t nr)
 {
     char buf[3];
@@ -101,30 +114,37 @@ static void output_percentage(uint8_t val, uint8_t max)
 void debug_appstate(appstate_t *appstate)
 {
 #ifdef DEBUGUART
-    switch (appstate->charge_mode)
-    {
-    case CHARGE_NONE:
-        uart_putchar('N');
-        break;
-    case CHARGE_A:
-        uart_putchar('A');
-        break;
-    case CHARGE_B:
-        uart_putchar('B');
-        break;
-    }
-    put_flag(appstate->discharge_a);
-    put_flag(appstate->discharge_b);
-    put_flag(appstate->dynamo_shutoff);
-    uart_putchar(' ');
-    // put_uint16(appstate->charge_count);
+    // switch (appstate->charge_mode)
+    // {
+    // case CHARGE_NONE:
+    //     uart_putchar('N');
+    //     break;
+    // case CHARGE_A:
+    //     uart_putchar('A');
+    //     break;
+    // case CHARGE_B:
+    //     uart_putchar('B');
+    //     break;
+    // }
+    // put_flag(appstate->discharge_a);
+    // put_flag(appstate->discharge_b);
+    // put_flag(appstate->dynamo_shutoff);
     // uart_putchar(' ');
-    put_uint16(appstate->charge_a_value);
-    put_uint16(appstate->charge_b_value);
-    put_uint16(appstate->max_discharge_value);
+    // // put_uint16(appstate->charge_count);
+    // // uart_putchar(' ');
+    // put_uint16(appstate->charge_a_value);
+    // put_uint16(appstate->charge_b_value);
+    // put_uint16(appstate->max_discharge_value);
+    // uart_putchar(' ');
     put_uint16(appstate->dynamo_frequency);
     uart_putchar(' ');
-    put_uint8(appstate->driving_state);
+    put_int16(appstate->diff);
+    uart_putchar(' ');
+    put_int16(appstate->avg);
+    uart_putchar(' ');
+    put_flag(appstate->is_braking);
+    // uart_putchar(' ');
+    // put_uint8(appstate->driving_state);
     uart_putchar('\r');
     uart_putchar('\n');
 #endif

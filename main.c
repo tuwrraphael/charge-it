@@ -25,16 +25,16 @@ static appstate_t appstate = {
 	.charge_a_value = 0,
 	.charge_b_value = 0,
 	.dynamo_frequency = 0,
-	.max_discharge_value = MIN_CHARGE_VALUE,
+	.max_discharge_value = MAX_CHARGE_VALUE-CHARGE_DISCHARGE_SPAN,
 	.driving_state = DRIVING_STATE_STOPPED,
-	.is_braking = FALSE,
+	.is_braking = 0,
 	.avg = 0,
 	.driving_state_timing = 0,
 	.cycle_count = 0,
 	.back_off = 0,
 	.max_charge_a_value = 0,
 	.max_charge_b_value = 0,
-	.turn_on_limit_us = TURN_ON_LIMIT_MAX};
+	.turn_on_limit = TURN_ON_LIMIT_MAX};
 
 #define ADMUX_BASE ((1 << REFS0) | (1 << REFS1))
 
@@ -199,9 +199,9 @@ static void apply_state()
 	if (!appstate.dynamo_shutoff && (PORTB & (1 << DYNAMO_OFF_PIN)) > 0)
 	{
 		PORTB &= ~(1 << DYNAMO_OFF_PIN);
-		if (appstate.turn_on_limit_us < TURN_ON_LIMIT_MAX)
+		if (appstate.turn_on_limit < TURN_ON_LIMIT_MAX)
 		{
-			OCR1B = TCNT1 + appstate.turn_on_limit_us;
+			OCR1B = TCNT1 + appstate.turn_on_limit;
 			TIMSK |= (1 << OCIE1B);
 		}
 	}
@@ -224,7 +224,7 @@ static void apply_state()
 		PORTD |= (1 << LED_FRONT_OFF_PIN);
 	}
 #ifndef DEBUGUART
-	if (appstate.is_braking)
+	if (appstate.is_braking > 0)
 	{
 		PORTD &= ~(1 << LED_BACK_OFF_PIN);
 	}
@@ -286,6 +286,7 @@ int main(void)
 				timer1_init(FALSE);
 				sei();
 				adc_measure();
+				moving_average_init(&deceleration_moving_average);
 			}
 		}
 		else
@@ -306,7 +307,12 @@ int main(void)
 			read_inputs();
 			if (task_flags & FREQUENCY_MEASUREMENT_TASK_FLAG)
 			{
-				moving_average_add(&deceleration_moving_average, convert_to_dynamo_rpm(appstate.dynamo_frequency, frequency_measurement));
+				appstate.diff = convert_to_dynamo_rpm(appstate.dynamo_frequency, frequency_measurement);
+				if (appstate.diff < (10 * BRAKE_THRESHOLD_SCALE) && appstate.diff > (0 - (10 * BRAKE_THRESHOLD_SCALE)))
+				{ // discard impossible outliers, 30 equals 12m/s^2 deceleration
+					moving_average_add(&deceleration_moving_average, appstate.diff);
+				}
+
 				appstate.avg = deceleration_moving_average.avg;
 				appstate.dynamo_frequency = frequency_measurement;
 				ATOMIC_BLOCK(ATOMIC_FORCEON)
@@ -346,7 +352,7 @@ int main(void)
 				app_power_save_count = 0;
 			}
 			// PORTB &= ~(1 << MISO_PIN);
-			debug_summary(&appstate);
+			debug_appstate(&appstate);
 		}
 		if (task_flags == 0)
 		{
@@ -374,8 +380,15 @@ ISR(TIMER1_CAPT_vect)
 		newVal |= (ICR1H << 8);
 		if (edge_before_valid)
 		{
-			frequency_measurement = newVal - edge_before;
-			task_flags |= frequency_measurement;
+			if (newVal > edge_before)
+			{
+				frequency_measurement = newVal - edge_before;
+			}
+			else
+			{
+				frequency_measurement = 65535 - edge_before + newVal;
+			}
+			task_flags |= FREQUENCY_MEASUREMENT_TASK_FLAG;
 		}
 		edge_before_valid = TRUE;
 		edge_before = newVal;
@@ -393,7 +406,7 @@ ISR(TIMER1_OVF_vect)
 	if (edge_before_valid == FALSE)
 	{
 		frequency_measurement = 0;
-		task_flags |= frequency_measurement;
+		task_flags |= FREQUENCY_MEASUREMENT_TASK_FLAG;
 	}
 	edge_before_valid = FALSE;
 }
@@ -404,7 +417,7 @@ ISR(TIMER2_OVF_vect)
 	if (appstate.light_requested)
 	{
 #ifndef DEBUGUART
-		if (!appstate.is_braking)
+		if (appstate.is_braking == 0)
 		{
 			PORTD &= ~(1 << LED_BACK_OFF_PIN);
 		}
@@ -421,14 +434,14 @@ ISR(TIMER2_COMP_vect)
 	if (appstate.light_requested)
 	{
 #ifndef DEBUGUART
-		if (!appstate.is_braking)
+		if (appstate.is_braking == 0)
 		{
 			PORTD |= (1 << LED_BACK_OFF_PIN);
 		}
+#endif
 		if (appstate.driving_state == DRIVING_STATE_STOPPING)
 		{
 			PORTD |= (1 << LED_FRONT_OFF_PIN);
 		}
-#endif
 	}
 }

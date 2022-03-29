@@ -35,7 +35,12 @@
         <label>Charge None:</label>
         <progress id="dischargeNone" value="0" max="100"></progress>
     </div>
+    <div>
+        <label>Is braking:</label>
+        <label id="isBraking"></label>
+    </div>
     <canvas id="myChart" width="400" height="400"></canvas>
+    <canvas id="myChart2" width="400" height="400"></canvas>
 
 
 
@@ -69,15 +74,18 @@
                                 console.log("|reader| has been canceled.");
                                 break;
                             }
-                            document.getElementById("chargeA").value = value[0];
-                            document.getElementById("chargeB").value = value[1];
-                            document.getElementById("dischargeNone").value = value[2];
-                            document.getElementById("dischargeA").value = value[3];
-                            document.getElementById("dischargeB").value = value[4];
-                            // let timestamp = new Intl.DateTimeFormat([], { hour: 'numeric', minute: 'numeric', second: 'numeric' }).format(new Date());
-                            // data.push(timestamp + ',' + value + '\n');
-                            // dataOutput.innerText = data.slice(Math.max(0, data.length - 11)).join('');
-                            updateChart(value);
+                            // console.log(value);
+                            if (value.length == 4) {
+                                document.getElementById("isBraking").innerText = value[3] ? "Yes" : "No";
+                                updateChart2(value);
+                            } else if (value.length > 4) {
+                                document.getElementById("chargeA").value = value[0];
+                                document.getElementById("chargeB").value = value[1];
+                                document.getElementById("dischargeNone").value = value[2];
+                                document.getElementById("dischargeA").value = value[3];
+                                document.getElementById("dischargeB").value = value[4];
+                                updateChart(value);
+                            }
                         }
                     } catch (error) {
                         console.log(error)
@@ -122,6 +130,7 @@
 
 
         const ctx = document.getElementById('myChart').getContext('2d');
+        const ctx2 = document.getElementById('myChart2').getContext('2d');
         const myChart = new Chart(ctx, {
             type: 'line',
             data: {
@@ -174,14 +183,86 @@
                 responsiveAnimationDuration: 0, // animation duration after a resize
             }
         });
+
+
+        const myChart2 = new Chart(ctx2, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: "Frequency Ctr",
+                    borderColor: "#00F",
+                    backgroundColor: "#00F",
+                    data: []
+                }, {
+                    label: "Diff",
+                    borderColor: "#000077",
+                    backgroundColor: "#000077",
+                    data: []
+                }, {
+                    label: "Avg Diff",
+                    borderColor: "#FF0000",
+                    backgroundColor: "#FF0000",
+                    data: []
+                },],
+                labels: []
+            },
+            options: {
+                scales: {
+                    y: {
+                        // min: -400,
+                        // max: 400
+                    }
+                },
+                animation: {
+                    duration: 0, // general animation time
+                },
+                hover: {
+                    animationDuration: 0, // duration of animations when hovering an item
+                },
+                responsiveAnimationDuration: 0, // animation duration after a resize
+            }
+        });
+
+        var bef = 0;
+
+        var vals = 64;
+
+        var values = new Array(vals).fill(0);
+
+
+
+        function updateChart2(value) {
+
+            let d = (12000000 / 8) / value[0];
+            myChart2.data.datasets[0].data.push(value[0]);
+            myChart2.data.datasets[1].data.push(value[1]);
+
+            values.push(d - bef);
+            bef = d;
+            values = values.slice(-vals);
+
+            myChart2.data.datasets[2].data.push(value[2]);
+
+            var length = myChart2.data.labels.length;
+            for (let d of myChart2.data.datasets) {
+                d.data = d.data.slice(Math.max(0, length - 1000 + 1));
+            }
+
+            myChart2.data.labels.push((myChart2.data.labels[myChart2.data.labels.length - 1] || 0) + 1);
+            myChart2.data.labels = myChart2.data.labels.slice(Math.max(0, length - 1000 + 1));
+            if (myChart2.data.labels[0] % 100 == 0) {
+                myChart2.update();
+            }
+        }
+
         function updateChart(value) {
 
-            myChart.data.datasets[0].data.push(value[7] *(13*2.56)/(1023*3));
-            myChart.data.datasets[1].data.push(value[6]*(13*2.56)/(1023*3));
-            myChart.data.datasets[2].data.push(value[9]*(13*2.56)/(1023*3));
-            myChart.data.datasets[3].data.push(value[8]*(13*2.56)/(1023*3));
-            myChart.data.datasets[4].data.push(value[5]*(13*2.56)/(1023*3));
-            myChart.data.datasets[5].data.push(value[5]*(13*2.56)/(1023*3) + 0.5);
+            myChart.data.datasets[0].data.push(value[7] * (13 * 2.56) / (1023 * 3));
+            myChart.data.datasets[1].data.push(value[6] * (13 * 2.56) / (1023 * 3));
+            myChart.data.datasets[2].data.push(value[9] * (13 * 2.56) / (1023 * 3));
+            myChart.data.datasets[3].data.push(value[8] * (13 * 2.56) / (1023 * 3));
+            myChart.data.datasets[4].data.push(value[5] * (13 * 2.56) / (1023 * 3));
+            myChart.data.datasets[5].data.push(value[5] * (13 * 2.56) / (1023 * 3) + 0.2);
             var length = myChart.data.labels.length;
             for (let d of myChart.data.datasets) {
                 d.data = d.data.slice(Math.max(0, length - 100 + 1));

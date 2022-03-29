@@ -112,8 +112,12 @@ void update_state(appstate_t *appstate,
 
     // boolean_t a_full = appstate->charge_a_value >= max_charge_value;
     // boolean_t b_full = appstate->charge_b_value >= max_charge_value;
+    uint16_t charge_level = appstate->max_discharge_value;
+    if (max_charge_value < VOLTS_TO_ADC(6)) {
+        charge_level = max_charge_value;
+    }
 
-    if (appstate->charge_a_value < appstate->max_discharge_value || appstate->charge_b_value < appstate->max_discharge_value)
+    if (appstate->charge_a_value < charge_level || appstate->charge_b_value < charge_level)
     {
         if (appstate->charge_a_value < appstate->charge_b_value)
         {
@@ -135,11 +139,10 @@ void update_state(appstate_t *appstate,
     appstate->cycle_count = (appstate->cycle_count + 1) % 100;
     appstate->max_charge_a_value = appstate->charge_a_value > appstate->max_charge_a_value ? appstate->charge_a_value : appstate->max_charge_a_value;
     appstate->max_charge_b_value = appstate->charge_b_value > appstate->max_charge_b_value ? appstate->charge_b_value : appstate->max_charge_b_value;
-    boolean_t limits_exeeded = appstate->max_charge_a_value > MAX_CHARGE_VALUE || appstate->max_charge_b_value > MAX_CHARGE_VALUE;
 
     if (appstate->cycle_count == 0)
     {
-
+        boolean_t limits_exeeded = appstate->max_charge_a_value > MAX_CHARGE_VALUE || appstate->max_charge_b_value > MAX_CHARGE_VALUE;
         if ((appstate->max_charge_a_value > max_charge_value || appstate->max_charge_b_value > max_charge_value) && !limits_exeeded)
         {
             if (appstate->back_off > 0)
@@ -159,19 +162,18 @@ void update_state(appstate_t *appstate,
         if (limits_exeeded)
         {
             appstate->back_off = 20;
-            if (appstate->turn_on_limit_us > TURN_ON_LIMIT_STEP)
+            if (appstate->turn_on_limit > TURN_ON_LIMIT_STEP)
             {
-                appstate->turn_on_limit_us -= TURN_ON_LIMIT_STEP;
+                appstate->turn_on_limit -= TURN_ON_LIMIT_STEP;
             }
         }
-        else if (appstate->max_charge_a_value < max_charge_value && appstate->max_charge_b_value < max_charge_value)
+        else if (appstate->max_charge_a_value < max_charge_value && appstate->max_charge_b_value < max_charge_value && appstate->turn_on_limit < TURN_ON_LIMIT_MAX)
         {
-            appstate->turn_on_limit_us = TURN_ON_LIMIT_MAX;
+            appstate->turn_on_limit += TURN_ON_LIMIT_STEP;
         }
 
         appstate->max_charge_a_value = 0;
         appstate->max_charge_b_value = 0;
-        appstate->cycle_count = 0;
     }
 
     appstate->dynamo_shutoff = !is_charging(appstate) && driving_below_danger_voltage(appstate);
@@ -180,11 +182,11 @@ void update_state(appstate_t *appstate,
 
     if (appstate->avg > BRAKING_THRESHOLD)
     {
-        appstate->is_braking = TRUE;
+        appstate->is_braking = BRAKE_LIGHT_TIMING;
     }
-    else
+    else if (app_timer_elapsed && appstate->is_braking > 0)
     {
-        appstate->is_braking = FALSE;
+        appstate->is_braking--;
     }
 }
 

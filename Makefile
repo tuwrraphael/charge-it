@@ -23,7 +23,7 @@ TEST_CC = g++
 TEST_LD = g++
 TEST_CFLAGS = -Wall -I /usr/include -I /usr/src/gtest -L /usr/local/lib -lpthread -DF_CPU=$(F_CPU)
 
-CFLAGS = -Wall -O3 -DF_CPU=$(F_CPU)UL -mmcu=$(MCU) -DLABBENCH
+CFLAGS = -Wall -O3 -DF_CPU=$(F_CPU)UL -mmcu=$(MCU)
 
 clean:
 	rm -rf build main.hex atmega8.map main.elf
