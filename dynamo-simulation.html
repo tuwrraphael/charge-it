@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamo Simulation</title>
+
+</head>
+
+<body>
+
+    <div class="chart-container" style="position: relative; height:60vh; width:95vw">
+        <canvas id="myChart"></canvas>
+    </div>
+
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.5.1/dist/chart.js"></script>
+    <script>
+
+        const ctx = document.getElementById('myChart').getContext('2d');
+        const myChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                datasets: [{
+                    label: "VoltageA",
+                    borderColor: "#00F",
+                    backgroundColor: "#00F",
+                    data: []
+                }, {
+                    label: "VoltageB",
+                    borderColor: "#000077",
+                    backgroundColor: "#000077",
+                    data: []
+                }, {
+                    label: "no discharge",
+                    borderColor: "#FF0000",
+                    backgroundColor: "#FF0000",
+                    data: []
+                }],
+                labels: []
+            },
+            options: {
+                responsive: true,
+                // scales: {
+                //     y: {
+                //         beginAtZero: true
+                //     }
+                // },
+                animation: {
+                    duration: 0, // general animation time
+                },
+                hover: {
+                    animationDuration: 0, // duration of animations when hovering an item
+                },
+                responsiveAnimationDuration: 0, // animation duration after a resize
+            }
+        });
+
+        const initialCapacitorVoltage = 6;
+
+        let resistance5v = 10;
+
+
+
+        let capacity = 470e-6;
+
+        function getChargeCurrent(voltage) {
+            return (0.2254 * voltage ** 2 - 25.262 * voltage + 611.12) / 1000;
+        }
+
+        const drivingSpeedKmh = 25;
+
+        let voltageA = initialCapacitorVoltage;
+        let voltageASub = initialCapacitorVoltage;
+        let voltageB = initialCapacitorVoltage;
+        let voltageBSub = initialCapacitorVoltage;
+
+
+        let max_charge = 9.5;
+        let min_charge = max_charge - 1;
+
+        let charge_before = null;
+
+        function executeProgram(va, vb) {
+            let charge = null;
+            if (va < min_charge || vb < min_charge) {
+                if (va < vb) {
+                    charge = "a";
+                } else {
+                    charge = "b";
+                }
+            }
+            else if (va > max_charge && vb > max_charge) {
+                charge = null;
+            } else {
+                if (va > max_charge) {
+                    charge = "b";
+                } else if (vb > max_charge) {
+                    charge = "a";
+                }
+                else if (charge_before != null) {
+                    charge = charge_before;
+                } else {
+                    if (va < vb) {
+                        charge = "a";
+                    } else {
+                        charge = "b";
+                    }
+                }
+            }
+
+            charge_before = charge;
+
+
+            return {
+                charge: charge,
+                dischargeA: va > 3.5 && charge != "a",
+                dischargeB: vb > 3.5 && charge != "b"
+            };
+        }
+
+        const timestep = 10e-6;
+
+        let time = 0;
+
+        function getEquivalentResistance(voltage) {
+            let input_resistance = time < 2500 * timestep ? 1000 : 8;
+            if (voltage < 8) {
+                return input_resistance;
+            }
+            let i = 5 / input_resistance;
+            let i_at_v = (i * 5 / voltage) * (1 / 0.77);
+            return voltage / i_at_v;
+        }
+
+        function simulateTimeStep(programOutput) {
+            time += timestep;
+            if (programOutput.charge == "a") {
+                let chargeCurrent = getChargeCurrent(voltageA + voltageASub);
+                voltageA += (timestep / capacity) * chargeCurrent;
+                voltageASub += (timestep / capacity) * chargeCurrent;
+            } else if (programOutput.charge == "b") {
+                let chargeCurrent = getChargeCurrent(voltageB + voltageBSub);
+                voltageB += (timestep / capacity) * chargeCurrent;
+                voltageBSub += (timestep / capacity) * chargeCurrent;
+            }
+
+            if (programOutput.dischargeA) {
+                let r = getEquivalentResistance(voltageA);
+                let discharge = Math.exp(-1 * timestep / ((r * 2) * (capacity)));
+                voltageA = voltageA * discharge;
+                voltageASub = voltageASub * discharge;
+            }
+            if (programOutput.dischargeB) {
+                let r = getEquivalentResistance(voltageB);
+                let discharge = Math.exp(-1 * timestep / ((r * 2) * (capacity)));
+                voltageB = voltageB * discharge;
+                voltageBSub = voltageBSub * discharge;
+            }
+        }
+
+        let programRunTime = 200e-6;
+
+        function updateChart(programOutput) {
+
+            myChart.data.datasets[0].data.push(voltageA);
+            myChart.data.datasets[1].data.push(voltageB);
+            // myChart.data.datasets[2].data.push(programOutput.dischargeA || programOutput.dischargeB ? 0 : 5);
+            // myChart.data.datasets[3].data.push(voltageBSub);
+
+            var length = myChart.data.labels.length;
+            // for (let d of myChart.data.datasets) {
+            //     d.data = d.data.slice(Math.max(0, length - 500 + 1));
+            // }
+
+            myChart.data.labels.push((myChart.data.labels[myChart.data.labels.length - 1] || 0) + 1);
+            // myChart.data.labels = myChart.data.labels.slice(Math.max(0, length - 500 + 1));
+
+        }
+
+        for (let i = 0; i < 500; i++) {
+            let output = executeProgram(voltageASub, voltageBSub);
+            for (let j = 0; j < programRunTime / timestep; j++) {
+                simulateTimeStep(output);
+                updateChart(output);
+            }
+        }
+
+        myChart.update();
+
+
+
+
+
+
+
+
+    </script>
+</body>
+
+</html>

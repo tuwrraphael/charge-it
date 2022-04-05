@@ -1,4 +1,5 @@
 #include "update_state.h"
+#include "uart_debug.h"
 #include "boolean.h"
 #include "app_state.h"
 #include "config.h"
@@ -12,7 +13,7 @@ static boolean_t is_driving(appstate_t *appstate)
 #ifndef LABBENCH
     return appstate->dynamo_frequency > 0;
 #else
-    return 0 == (PINB & (1 << MOSI_PIN));
+    return TRUE;
 #endif
 }
 
@@ -21,7 +22,7 @@ static boolean_t is_driving_fast(appstate_t *appstate)
 #ifndef LABBENCH
     return appstate->dynamo_frequency < DYNAMO_FREQUENCY_DRIVING;
 #else
-    return 0 == (PINB & (1 << SCK_PIN));
+    return TRUE;
 #endif
 }
 
@@ -43,7 +44,7 @@ static void step_down(appstate_t *appstate)
 {
     if (appstate->max_discharge_value > MIN_CHARGE_VALUE)
     {
-        appstate->max_discharge_value -= CHARGE_VOLTAGE_STEP;
+        appstate->max_discharge_value -= VOLTS_TO_ADC(0.1);
     }
 }
 
@@ -51,7 +52,7 @@ static void step_up(appstate_t *appstate)
 {
     if (appstate->max_discharge_value < MAX_CHARGE_VALUE)
     {
-        appstate->max_discharge_value += CHARGE_VOLTAGE_STEP;
+        appstate->max_discharge_value += VOLTS_TO_ADC(0.5);
     }
 }
 
@@ -112,12 +113,12 @@ void update_state(appstate_t *appstate,
 
     // boolean_t a_full = appstate->charge_a_value >= max_charge_value;
     // boolean_t b_full = appstate->charge_b_value >= max_charge_value;
-    uint16_t charge_level = appstate->max_discharge_value;
-    if (max_charge_value < VOLTS_TO_ADC(6)) {
-        charge_level = max_charge_value;
-    }
+    // uint16_t charge_level = appstate->max_discharge_value;
 
-    if (appstate->charge_a_value < charge_level || appstate->charge_b_value < charge_level)
+    boolean_t a_empty = appstate->charge_a_value < appstate->max_discharge_value;
+    boolean_t b_empty = appstate->charge_b_value < appstate->max_discharge_value;
+
+    if (a_empty || b_empty)
     {
         if (appstate->charge_a_value < appstate->charge_b_value)
         {
@@ -130,38 +131,77 @@ void update_state(appstate_t *appstate,
     }
     else
     {
-        appstate->charge_mode = CHARGE_NONE;
-    }
-
-    appstate->discharge_a = appstate->charge_mode != CHARGE_A && appstate->charge_a_value > MAX_DISCHARGE_VALUE;
-    appstate->discharge_b = appstate->charge_mode != CHARGE_B && appstate->charge_b_value > MAX_DISCHARGE_VALUE;
-
-    appstate->cycle_count = (appstate->cycle_count + 1) % 100;
-    appstate->max_charge_a_value = appstate->charge_a_value > appstate->max_charge_a_value ? appstate->charge_a_value : appstate->max_charge_a_value;
-    appstate->max_charge_b_value = appstate->charge_b_value > appstate->max_charge_b_value ? appstate->charge_b_value : appstate->max_charge_b_value;
-
-    if (appstate->cycle_count == 0)
-    {
-        boolean_t limits_exeeded = appstate->max_charge_a_value > MAX_CHARGE_VALUE || appstate->max_charge_b_value > MAX_CHARGE_VALUE;
-        if ((appstate->max_charge_a_value > max_charge_value || appstate->max_charge_b_value > max_charge_value) && !limits_exeeded)
+        boolean_t a_full = appstate->charge_a_value < appstate->max_discharge_value;
+        boolean_t b_full = appstate->charge_b_value < appstate->max_discharge_value;
+        if (!(a_full && b_full))
         {
-            if (appstate->back_off > 0)
+            if (appstate->charge_a_value < appstate->charge_b_value)
             {
-                appstate->back_off--;
+                appstate->charge_mode = CHARGE_A;
             }
             else
             {
-                step_up(appstate);
+                appstate->charge_mode = CHARGE_B;
             }
         }
         else
         {
-            step_down(appstate);
+            appstate->charge_mode = CHARGE_NONE;
         }
+    }
 
+    appstate->max_charge_a_value = appstate->charge_a_value > appstate->max_charge_a_value ? appstate->charge_a_value : appstate->max_charge_a_value;
+    appstate->max_charge_b_value = appstate->charge_b_value > appstate->max_charge_b_value ? appstate->charge_b_value : appstate->max_charge_b_value;
+
+    if (appstate->charge_current_measurement_count >= 100)
+    {
+        appstate->charge_current_measurement_count = 0;
+        if (appstate->back_off > 0)
+        {
+            appstate->back_off--;
+        }
+        else
+        {
+            if (appstate->max_charge_a_value < appstate->max_discharge_value)
+            {
+                step_down(appstate);
+            }
+            else
+            {
+                uint16_t max_discharge_mv = appstate->charge_voltage_sum;
+
+                uint16_t power_mw = (max_discharge_mv / 100) * (appstate->charge_current_measurement_sum / 100);
+
+                if (appstate->power_before > power_mw)
+                {
+                    // appstate->mppt_direction_change_ctr++;
+                    // if (appstate->mppt_direction_change_ctr >= 3)
+                    // {
+                    //     appstate->mppt_direction_change_ctr = 0;
+                    appstate->mppt_direction_down = !appstate->mppt_direction_down;
+                    // }
+                }
+                // else if (appstate->mppt_direction_change_ctr > 0)
+                // {
+                //     appstate->mppt_direction_change_ctr--;
+                // }
+                appstate->power_before = power_mw;
+                if (appstate->mppt_direction_down)
+                {
+                    step_down(appstate);
+                }
+                else
+                {
+
+                    step_up(appstate);
+                }
+            }
+        }
+        boolean_t limits_exeeded = appstate->max_charge_a_value > MAX_CHARGE_VALUE || appstate->max_charge_b_value > MAX_CHARGE_VALUE;
         if (limits_exeeded)
         {
             appstate->back_off = 20;
+            step_down(appstate);
             if (appstate->turn_on_limit > TURN_ON_LIMIT_STEP)
             {
                 appstate->turn_on_limit -= TURN_ON_LIMIT_STEP;
@@ -171,10 +211,14 @@ void update_state(appstate_t *appstate,
         {
             appstate->turn_on_limit += TURN_ON_LIMIT_STEP;
         }
-
+        appstate->charge_current_measurement_sum = 0;
         appstate->max_charge_a_value = 0;
         appstate->max_charge_b_value = 0;
+        appstate->charge_voltage_sum = 0;
     }
+
+    appstate->discharge_a = appstate->charge_mode != CHARGE_A && appstate->charge_a_value > MAX_DISCHARGE_VALUE;
+    appstate->discharge_b = appstate->charge_mode != CHARGE_B && appstate->charge_b_value > MAX_DISCHARGE_VALUE;
 
     appstate->dynamo_shutoff = !is_charging(appstate) && driving_below_danger_voltage(appstate);
 

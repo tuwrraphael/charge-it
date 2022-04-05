@@ -74,9 +74,7 @@
                                 console.log("|reader| has been canceled.");
                                 break;
                             }
-                            // console.log(value);
-                            if (value.length == 4) {
-                                document.getElementById("isBraking").innerText = value[3] ? "Yes" : "No";
+                            if (value.length == 6) {
                                 updateChart2(value);
                             } else if (value.length > 4) {
                                 document.getElementById("chargeA").value = value[0];
@@ -189,21 +187,32 @@
             type: 'line',
             data: {
                 datasets: [{
-                    label: "Frequency Ctr",
+                    label: "Current",
                     borderColor: "#00F",
                     backgroundColor: "#00F",
                     data: []
                 }, {
-                    label: "Diff",
+                    label: "Voltage",
                     borderColor: "#000077",
                     backgroundColor: "#000077",
                     data: []
                 }, {
-                    label: "Avg Diff",
+                    label: "Power",
                     borderColor: "#FF0000",
                     backgroundColor: "#FF0000",
                     data: []
-                },],
+                }, {
+                    label: "ChargeA Max",
+                    borderColor: "#440011",
+                    backgroundColor: "#440011",
+                    data: []
+                },
+                {
+                    label: "Leistung Kontrolle",
+                    borderColor: "#440011",
+                    backgroundColor: "#440011",
+                    data: []
+                }],
                 labels: []
             },
             options: {
@@ -223,34 +232,22 @@
             }
         });
 
-        var bef = 0;
-
-        var vals = 64;
-
-        var values = new Array(vals).fill(0);
-
-
-
         function updateChart2(value) {
 
-            let d = (12000000 / 8) / value[0];
-            myChart2.data.datasets[0].data.push(value[0]);
-            myChart2.data.datasets[1].data.push(value[1]);
-
-            values.push(d - bef);
-            bef = d;
-            values = values.slice(-vals);
-
-            myChart2.data.datasets[2].data.push(value[2]);
+            myChart2.data.datasets[0].data.push((value[0] / 10) / 1000);
+            myChart2.data.datasets[1].data.push(value[3] * (13 * 2.56) / (1023 * 3));
+            myChart2.data.datasets[2].data.push(value[5] / 1000);
+            myChart2.data.datasets[3].data.push(value[4] / (1000));
+            myChart2.data.datasets[4].data.push(value[4] / (1000) * (value[0] / 10) / 1000);
 
             var length = myChart2.data.labels.length;
             for (let d of myChart2.data.datasets) {
-                d.data = d.data.slice(Math.max(0, length - 1000 + 1));
+                d.data = d.data.slice(Math.max(0, length - 100 + 1));
             }
 
             myChart2.data.labels.push((myChart2.data.labels[myChart2.data.labels.length - 1] || 0) + 1);
-            myChart2.data.labels = myChart2.data.labels.slice(Math.max(0, length - 1000 + 1));
-            if (myChart2.data.labels[0] % 100 == 0) {
+            myChart2.data.labels = myChart2.data.labels.slice(Math.max(0, length - 100 + 1));
+            if (myChart2.data.labels[0] % 10 == 0) {
                 myChart2.update();
             }
         }

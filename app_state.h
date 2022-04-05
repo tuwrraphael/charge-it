@@ -27,6 +27,13 @@ typedef struct
     boolean_t dynamo_shutoff;
     uint16_t charge_a_value;
     uint16_t charge_b_value;
+    
+    uint16_t charge_current_measurement_sum;
+    uint16_t charge_voltage_sum;
+    uint16_t power_before;
+    uint8_t charge_current_measurement_count;
+    boolean_t mppt_direction_down;
+
     uint16_t max_discharge_value;
     uint16_t dynamo_frequency;
 
