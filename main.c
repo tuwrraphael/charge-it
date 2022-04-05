@@ -1,7 +1,6 @@
 #include <avr/io.h>
 #include <avr/interrupt.h>
 #include <avr/sleep.h>
-#include <util/delay.h>
 #include <stdio.h>
 #include <util/atomic.h>
 
@@ -13,6 +12,7 @@
 #include "moving_average.h"
 #include "convert_to_dynamo_rpm.h"
 #include "update_state.h"
+#include "charge_current.h"
 
 static moving_average_t deceleration_moving_average;
 
@@ -34,7 +34,13 @@ static appstate_t appstate = {
 	.back_off = 0,
 	.max_charge_a_value = 0,
 	.max_charge_b_value = 0,
-	.turn_on_limit = TURN_ON_LIMIT_MAX};
+	.turn_on_limit = TURN_ON_LIMIT_MAX,
+	.charge_current_measurement_sum = 0,
+	.power_before = 0,
+	.charge_current_measurement_count = 0,
+	.mppt_direction_down = TRUE,
+	.charge_voltage_sum = 0};
+
 #ifdef USE_SIMULATION
 static volatile uint8_t debugstate[10] __attribute__((section(".mysection")));
 #endif
@@ -42,14 +48,18 @@ static volatile uint8_t debugstate[10] __attribute__((section(".mysection")));
 #define ADMUX_BASE ((1 << REFS0) | (1 << REFS1))
 
 static volatile boolean_t next_measurement_a = TRUE;
+static volatile uint8_t adc_measurment_count = 0;
+static volatile uint16_t adc_measurement_1 = 0;
+static volatile uint16_t adc_measurement_1_time = 0;
+static volatile uint16_t adc_measurement_2 = 0;
+static volatile uint16_t adc_measurement_2_time = 0;
 
 static uint16_t edge_before = 0;
 static uint16_t frequency_measurement = 0;
 
-static volatile uint8_t task_flags = 0;
+static volatile uint8_t task_flags;
 
 #define FREQUENCY_MEASUREMENT_TASK_FLAG (1 << 0)
-#define ADC_TASK_FLAG (1 << 1)
 #define TIMER_TASK_FLAG (1 << 2)
 
 static volatile boolean_t edge_before_valid = TRUE;
@@ -58,12 +68,8 @@ static boolean_t app_power_save = TRUE;
 static volatile boolean_t leave_power_save_requested = TRUE;
 uint8_t app_power_save_count = 0;
 
-static void adc_measure()
+static void adc_measure(void)
 {
-	ATOMIC_BLOCK(ATOMIC_FORCEON)
-	{
-		task_flags &= ~ADC_TASK_FLAG;
-	}
 	if (next_measurement_a)
 	{
 		ADMUX &= ~(1 << MUX0);
@@ -72,18 +78,24 @@ static void adc_measure()
 	{
 		ADMUX |= (1 << MUX0);
 	}
+	while (ADCSRA & (1 << ADSC))
+		;
+	ATOMIC_BLOCK(ATOMIC_FORCEON)
+	{
+		adc_measurment_count = 0;
+	}
 	ADCSRA |= (1 << ADSC);
 }
 
-static void adc_init()
+static void adc_init(void)
 {
 	ADMUX = ADMUX_BASE;
-	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1) | (1 << ADIE);
+	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS0);
 	next_measurement_a = TRUE;
 	ADCSRA |= (1 << ADSC);
 	while (ADCSRA & (1 << ADSC))
 		;
-	task_flags &= ~ADC_TASK_FLAG;
+	ADCSRA |= (1 << ADIE);
 }
 
 static void timer1_init(boolean_t power_save)
@@ -113,7 +125,7 @@ static void timer1_init(boolean_t power_save)
 	TCCR1B = (1 << ICES1) | timer_clk_src | (1 << ICNC1);
 }
 
-static void timer2_init()
+static void timer2_init(void)
 {
 #ifdef USE_SIMULATION
 	TCCR2B = (1 << CS22);
@@ -126,7 +138,7 @@ static void timer2_init()
 #endif
 }
 
-static void io_init()
+static void io_init(void)
 {
 	PORTC &= ~((1 << CHARGE_A_ON_PIN) |
 			   (1 << CHARGE_B_ON_PIN) |
@@ -169,7 +181,7 @@ static void io_init()
 #endif
 }
 
-static void apply_state()
+static void apply_state(void)
 {
 
 	if (appstate.dynamo_shutoff && (PORTB & (1 << DYNAMO_OFF_PIN)) == 0)
@@ -257,7 +269,7 @@ static void apply_state()
 #endif
 }
 
-static void read_inputs()
+static void read_inputs(void)
 {
 	appstate.light_requested = 0 == (PIND & (1 << LED_LIGHT_REQUEST_PIN));
 }
@@ -280,7 +292,7 @@ int main(void)
 		if (app_power_save)
 		{
 #ifdef LABBENCH
-			if (!(0 == (PINB & (1 << MOSI_PIN))))
+			if (FALSE)
 #else
 			if (!leave_power_save_requested)
 #endif
@@ -301,6 +313,7 @@ int main(void)
 			}
 			else
 			{
+				debug_powersave(&appstate);
 				cli();
 				app_power_save = FALSE;
 				app_power_save_count = 0;
@@ -313,15 +326,23 @@ int main(void)
 		}
 		else
 		{
-			if (task_flags & ADC_TASK_FLAG)
+			if (adc_measurment_count == 2)
 			{
+				uint16_t elapsed = adc_measurement_2_time > adc_measurement_1_time ? adc_measurement_2_time - adc_measurement_1_time : adc_measurement_2_time + (0xFFFF - adc_measurement_1_time);
+				uint16_t current = get_charge_current_mA(elapsed, adc_measurement_1, adc_measurement_2);
+				if (current != 0)
+				{
+					appstate.charge_current_measurement_count++;
+					appstate.charge_current_measurement_sum += current / 10;
+					appstate.charge_voltage_sum += ADC_TO_MV(adc_measurement_2) / 100;
+				}
 				if (ADMUX & (1 << MUX0))
 				{
-					appstate.charge_b_value = ADC;
+					appstate.charge_b_value = adc_measurement_2;
 				}
 				else
 				{
-					appstate.charge_a_value = ADC;
+					appstate.charge_a_value = adc_measurement_2;
 				}
 				next_measurement_a = !next_measurement_a;
 				adc_measure();
@@ -374,7 +395,9 @@ int main(void)
 				app_power_save_count = 0;
 			}
 			// PORTB &= ~(1 << MISO_PIN);
-			debug_appstate(&appstate);
+			if (appstate.charge_current_measurement_count ==99) {
+				debug_appstate(&appstate);
+			}
 		}
 #ifdef USE_SIMULATION
 		debugstate[0] = appstate.driving_state;
@@ -383,7 +406,7 @@ int main(void)
 		debugstate[4] = appstate.dynamo_frequency & 0xFF;
 		debugstate[5] = (appstate.dynamo_frequency >> 8) & 0xFF;
 #endif
-		if (task_flags == 0)
+		if (task_flags == 0 || (adc_measurment_count == 2))
 		{
 			set_sleep_mode(SLEEP_MODE_IDLE);
 			sleep_mode();
@@ -392,12 +415,24 @@ int main(void)
 	return 0;
 }
 
-ISR(ADC_vect)
+ISR(ADC_vect, ISR_BLOCK)
 {
-	task_flags |= ADC_TASK_FLAG;
+	if (adc_measurment_count == 0)
+	{
+		adc_measurement_1_time = TCNT1;
+		adc_measurement_1 = ADC;
+		adc_measurment_count = 1;
+		ADCSRA |= (1 << ADSC);
+	}
+	else
+	{
+		adc_measurement_2_time = TCNT1;
+		adc_measurement_2 = ADC;
+		adc_measurment_count = 2;
+	}
 }
 
-ISR(TIMER1_CAPT_vect)
+ISR(TIMER1_CAPT_vect, ISR_BLOCK)
 {
 	if (app_power_save)
 	{
@@ -424,7 +459,7 @@ ISR(TIMER1_CAPT_vect)
 	}
 }
 
-ISR(TIMER1_COMPB_vect)
+ISR(TIMER1_COMPB_vect, ISR_BLOCK)
 {
 	PORTB |= (1 << DYNAMO_OFF_PIN);
 #ifdef USE_SIMULATION
@@ -434,7 +469,7 @@ ISR(TIMER1_COMPB_vect)
 #endif
 }
 
-ISR(TIMER1_OVF_vect)
+ISR(TIMER1_OVF_vect, ISR_BLOCK)
 {
 	if (edge_before_valid == FALSE)
 	{
@@ -444,7 +479,7 @@ ISR(TIMER1_OVF_vect)
 	edge_before_valid = FALSE;
 }
 
-ISR(TIMER2_OVF_vect)
+ISR(TIMER2_OVF_vect, ISR_BLOCK)
 {
 	task_flags |= TIMER_TASK_FLAG;
 	if (appstate.light_requested)
@@ -463,10 +498,10 @@ ISR(TIMER2_OVF_vect)
 }
 
 #ifdef USE_SIMULATION
-ISR(TIMER2_COMPB_vect)
+ISR(TIMER2_COMPB_vect, ISR_BLOCK)
 {
 #else
-ISR(TIMER2_COMP_vect)
+ISR(TIMER2_COMP_vect, ISR_BLOCK)
 {
 #endif
 	if (appstate.light_requested)

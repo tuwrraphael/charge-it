@@ -3,7 +3,9 @@
 
 #include "app_state.h"
 
-void uart_debug_init();
+void uart_debug_init(void);
+
+void  debug_uint16(uint16_t val, uint16_t val2);
 
 void debug_appstate(appstate_t *appstate);
 

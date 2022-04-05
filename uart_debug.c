@@ -115,6 +115,15 @@ static void output_percentage(uint8_t val, uint8_t max)
     put_uint8(per);
 }
 
+void debug_uint16(uint16_t val, uint16_t val2)
+{
+    put_uint16(val);
+    uart_putchar(' ');
+    put_uint16(val2);
+    uart_putchar('\r');
+    uart_putchar('\n');
+}
+
 void debug_appstate(appstate_t *appstate)
 {
 #ifdef DEBUGUART
@@ -140,15 +149,17 @@ void debug_appstate(appstate_t *appstate)
     // put_uint16(appstate->charge_b_value);
     // put_uint16(appstate->max_discharge_value);
     // uart_putchar(' ');
-    put_uint16(appstate->dynamo_frequency);
+    put_uint16(appstate->charge_current_measurement_sum);
     uart_putchar(' ');
-    put_int16(appstate->diff);
+    put_uint8(appstate->charge_current_measurement_count);
     uart_putchar(' ');
-    put_int16(appstate->avg);
+    put_flag(appstate->mppt_direction_down);
     uart_putchar(' ');
-    put_flag(appstate->is_braking);
-    // uart_putchar(' ');
-    // put_uint8(appstate->driving_state);
+    put_uint16(appstate->max_discharge_value);
+    uart_putchar(' ');
+    put_uint16(appstate->charge_voltage_sum);
+    uart_putchar(' ');
+    put_uint16(appstate->power_before);
     uart_putchar('\r');
     uart_putchar('\n');
 #endif
@@ -156,73 +167,73 @@ void debug_appstate(appstate_t *appstate)
 
 void debug_summary(appstate_t *appstate)
 {
-#ifdef DEBUGUART
-    if (debug_summary_data.cycle == SUMMARY_OUTPUT)
-    {
-        output_percentage(debug_summary_data.charge_a_count, debug_summary_data.cycle);
-        uart_putchar(' ');
-        output_percentage(debug_summary_data.charge_b_count, debug_summary_data.cycle);
-        uart_putchar(' ');
-        output_percentage(debug_summary_data.shutoff_count, debug_summary_data.cycle);
-        uart_putchar(' ');
-        output_percentage(debug_summary_data.discharge_a_count, debug_summary_data.cycle);
-        uart_putchar(' ');
-        output_percentage(debug_summary_data.discharge_b_count, debug_summary_data.cycle);
-        uart_putchar(' ');
-        put_uint16(debug_summary_data.max_charge_val_avg);
-        uart_putchar(' ');
-        put_uint16(debug_summary_data.charge_a_max);
-        uart_putchar(' ');
-        put_uint16(debug_summary_data.charge_a_min);
-        uart_putchar(' ');
-        put_uint16(debug_summary_data.charge_b_max);
-        uart_putchar(' ');
-        put_uint16(debug_summary_data.charge_b_min);
-        uart_putchar(' ');
-        put_uint16(debug_summary_data.freq_avg);
-        uart_putchar('\r');
-        uart_putchar('\n');
-        debug_summary_data.cycle = 0;
-        debug_summary_data.charge_a_count = 0;
-        debug_summary_data.charge_b_count = 0;
-        debug_summary_data.shutoff_count = 0;
-        debug_summary_data.discharge_a_count = 0;
-        debug_summary_data.discharge_b_count = 0;
-        debug_summary_data.max_charge_val_avg = 0;
-        debug_summary_data.charge_a_max = 0;
-        debug_summary_data.charge_a_min = 999;
-        debug_summary_data.charge_b_max = 0;
-        debug_summary_data.charge_b_min = 999;
-        debug_summary_data.freq_avg = 0;
-    }
-    debug_summary_data.cycle++;
-    switch (appstate->charge_mode)
-    {
-    case CHARGE_NONE:
-        debug_summary_data.shutoff_count++;
-        break;
-    case CHARGE_A:
-        debug_summary_data.charge_a_count++;
-        break;
-    case CHARGE_B:
-        debug_summary_data.charge_b_count++;
-        break;
-    }
-    if (appstate->discharge_a)
-    {
-        debug_summary_data.discharge_a_count++;
-    }
-    if (appstate->discharge_b)
-    {
-        debug_summary_data.discharge_b_count++;
-    }
-    debug_summary_data.max_charge_val_avg += ((int16_t)appstate->max_discharge_value - (int16_t)debug_summary_data.max_charge_val_avg) / debug_summary_data.cycle;
-    debug_summary_data.charge_a_max = appstate->charge_a_value > debug_summary_data.charge_a_max ? appstate->charge_a_value : debug_summary_data.charge_a_max;
-    debug_summary_data.charge_b_max = appstate->charge_b_value > debug_summary_data.charge_b_max ? appstate->charge_b_value : debug_summary_data.charge_b_max;
-    debug_summary_data.charge_a_min = appstate->charge_a_value < debug_summary_data.charge_a_min ? appstate->charge_a_value : debug_summary_data.charge_a_min;
-    debug_summary_data.charge_b_min = appstate->charge_b_value < debug_summary_data.charge_b_min ? appstate->charge_b_value : debug_summary_data.charge_b_min;
-    debug_summary_data.freq_avg += (appstate->dynamo_frequency - debug_summary_data.freq_avg) / debug_summary_data.cycle;
-#endif
+    // #ifdef DEBUGUART
+    //     if (debug_summary_data.cycle == SUMMARY_OUTPUT)
+    //     {
+    //         output_percentage(debug_summary_data.charge_a_count, debug_summary_data.cycle);
+    //         uart_putchar(' ');
+    //         output_percentage(debug_summary_data.charge_b_count, debug_summary_data.cycle);
+    //         uart_putchar(' ');
+    //         output_percentage(debug_summary_data.shutoff_count, debug_summary_data.cycle);
+    //         uart_putchar(' ');
+    //         output_percentage(debug_summary_data.discharge_a_count, debug_summary_data.cycle);
+    //         uart_putchar(' ');
+    //         output_percentage(debug_summary_data.discharge_b_count, debug_summary_data.cycle);
+    //         uart_putchar(' ');
+    //         put_uint16(debug_summary_data.max_charge_val_avg);
+    //         uart_putchar(' ');
+    //         put_uint16(debug_summary_data.charge_a_max);
+    //         uart_putchar(' ');
+    //         put_uint16(debug_summary_data.charge_a_min);
+    //         uart_putchar(' ');
+    //         put_uint16(debug_summary_data.charge_b_max);
+    //         uart_putchar(' ');
+    //         put_uint16(debug_summary_data.charge_b_min);
+    //         uart_putchar(' ');
+    //         put_uint16(debug_summary_data.freq_avg);
+    //         uart_putchar('\r');
+    //         uart_putchar('\n');
+    //         debug_summary_data.cycle = 0;
+    //         debug_summary_data.charge_a_count = 0;
+    //         debug_summary_data.charge_b_count = 0;
+    //         debug_summary_data.shutoff_count = 0;
+    //         debug_summary_data.discharge_a_count = 0;
+    //         debug_summary_data.discharge_b_count = 0;
+    //         debug_summary_data.max_charge_val_avg = 0;
+    //         debug_summary_data.charge_a_max = 0;
+    //         debug_summary_data.charge_a_min = 999;
+    //         debug_summary_data.charge_b_max = 0;
+    //         debug_summary_data.charge_b_min = 999;
+    //         debug_summary_data.freq_avg = 0;
+    //     }
+    //     debug_summary_data.cycle++;
+    //     switch (appstate->charge_mode)
+    //     {
+    //     case CHARGE_NONE:
+    //         debug_summary_data.shutoff_count++;
+    //         break;
+    //     case CHARGE_A:
+    //         debug_summary_data.charge_a_count++;
+    //         break;
+    //     case CHARGE_B:
+    //         debug_summary_data.charge_b_count++;
+    //         break;
+    //     }
+    //     if (appstate->discharge_a)
+    //     {
+    //         debug_summary_data.discharge_a_count++;
+    //     }
+    //     if (appstate->discharge_b)
+    //     {
+    //         debug_summary_data.discharge_b_count++;
+    //     }
+    //     debug_summary_data.max_charge_val_avg += ((int16_t)appstate->max_discharge_value - (int16_t)debug_summary_data.max_charge_val_avg) / debug_summary_data.cycle;
+    //     debug_summary_data.charge_a_max = appstate->charge_a_value > debug_summary_data.charge_a_max ? appstate->charge_a_value : debug_summary_data.charge_a_max;
+    //     debug_summary_data.charge_b_max = appstate->charge_b_value > debug_summary_data.charge_b_max ? appstate->charge_b_value : debug_summary_data.charge_b_max;
+    //     debug_summary_data.charge_a_min = appstate->charge_a_value < debug_summary_data.charge_a_min ? appstate->charge_a_value : debug_summary_data.charge_a_min;
+    //     debug_summary_data.charge_b_min = appstate->charge_b_value < debug_summary_data.charge_b_min ? appstate->charge_b_value : debug_summary_data.charge_b_min;
+    //     debug_summary_data.freq_avg += (appstate->dynamo_frequency - debug_summary_data.freq_avg) / debug_summary_data.cycle;
+    // #endif
 }
 
 void debug_powersave(appstate_t *appstate)
