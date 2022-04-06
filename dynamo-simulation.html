@@ -27,17 +27,33 @@
                     label: "VoltageA",
                     borderColor: "#00F",
                     backgroundColor: "#00F",
-                    data: []
+                    data: [],
+                    pointRadius: 0
                 }, {
                     label: "VoltageB",
                     borderColor: "#000077",
                     backgroundColor: "#000077",
-                    data: []
+                    data: [],
+                    pointRadius: 0
                 }, {
-                    label: "no discharge",
+                    label: "Discharge Current",
                     borderColor: "#FF0000",
                     backgroundColor: "#FF0000",
-                    data: []
+                    data: [],
+                    pointRadius: 0
+                }, {
+                    label: "Discharge Power",
+                    borderColor: "#00AA00",
+                    backgroundColor: "#00AA00",
+                    data: [],
+                    pointRadius: 0
+                },
+                {
+                    label: "Avg Discharge Power",
+                    borderColor: "#00FF00",
+                    backgroundColor: "#00FF00",
+                    data: [],
+                    pointRadius: 0
                 }],
                 labels: []
             },
@@ -58,9 +74,12 @@
             }
         });
 
-        const initialCapacitorVoltage = 6;
 
-        let resistance5v = 10;
+
+        let resistance5v = 6.5;
+
+        let dischargeCurrentA = 0;
+        let dischargeCurrentB = 0;
 
 
 
@@ -72,20 +91,27 @@
 
         const drivingSpeedKmh = 25;
 
+
+
+
+        let max_charge = 12.5;
+        let min_charge = max_charge -2;
+
+        const initialCapacitorVoltage = max_charge;
+
         let voltageA = initialCapacitorVoltage;
         let voltageASub = initialCapacitorVoltage;
         let voltageB = initialCapacitorVoltage;
         let voltageBSub = initialCapacitorVoltage;
 
-
-        let max_charge = 9.5;
-        let min_charge = max_charge - 1;
-
         let charge_before = null;
+
+        let dutyCycle = 0;
 
         function executeProgram(va, vb) {
             let charge = null;
             if (va < min_charge || vb < min_charge) {
+                dutyCycle = dutyCycle > 0 ? dutyCycle - 1 : 0;
                 if (va < vb) {
                     charge = "a";
                 } else {
@@ -94,30 +120,34 @@
             }
             else if (va > max_charge && vb > max_charge) {
                 charge = null;
+                dutyCycle = dutyCycle < 100 ? dutyCycle + 1 : 100;
             } else {
-                if (va > max_charge) {
-                    charge = "b";
-                } else if (vb > max_charge) {
+                dutyCycle = dutyCycle < 100 ? dutyCycle + 1 : 100;
+                // if (va > max_charge) {
+                //     charge = "b";
+                // } else if (vb > max_charge) {
+                //     charge = "a";
+                // }
+                // else if (charge_before != null) {
+                //     charge = charge_before;
+                // } else {
+                if (va < vb) {
                     charge = "a";
-                }
-                else if (charge_before != null) {
-                    charge = charge_before;
                 } else {
-                    if (va < vb) {
-                        charge = "a";
-                    } else {
-                        charge = "b";
-                    }
+                    charge = "b";
                 }
+                // }
             }
 
             charge_before = charge;
 
+            console.log(dutyCycle);
 
             return {
                 charge: charge,
                 dischargeA: va > 3.5 && charge != "a",
-                dischargeB: vb > 3.5 && charge != "b"
+                dischargeB: vb > 3.5 && charge != "b",
+                dischargeDutycycle: dutyCycle
             };
         }
 
@@ -126,17 +156,70 @@
         let time = 0;
 
         function getEquivalentResistance(voltage) {
-            let input_resistance = time < 2500 * timestep ? 1000 : 8;
-            if (voltage < 8) {
-                return input_resistance;
+            // let input_resistance = time < 2500 * timestep ? 1000 : 8;
+            // if (voltage < 8) {
+            //     return input_resistance;
+            // }
+            // let i = 5 / input_resistance;
+            // let i_at_v = (i * 5 / voltage) * (1 / 0.77);
+            // return voltage / i_at_v;
+            return resistance5v;
+        }
+
+        let timer1Ctr = 0;
+        let timer1InternalCtr = 0;
+        let timer1OCR = 1;
+
+
+        let discharging = false;
+
+        let dischargeA = false;
+        let dischargeB = false;
+
+        let dutyperiod = 4;
+
+        function timer1_interrupt(programOutput) {
+            if (programOutput.dischargeDutycycle == 100) {
+                dischargeA = programOutput.dischargeA;
+                dischargeB = programOutput.dischargeB;
+                timer1OCR = (timer1Ctr + dutyperiod + Math.round(20 / 8)) % 65535;
+            } else if (programOutput.dischargeDutycycle == 0) {
+                dischargeA = false;
+                dischargeB = false;
+                timer1OCR = (timer1Ctr + dutyperiod + Math.round(20 / 8)) % 65535;
+            } else {
+                discharging = !discharging;
+                if (discharging) {
+                    if (programOutput.dischargeA) {
+                        dischargeA = true;
+                    }
+                    if (programOutput.dischargeB) {
+                        dischargeB = true;
+                    }
+                    timer1OCR = (timer1Ctr + Math.floor((programOutput.dischargeDutycycle * dutyperiod) / 100) + Math.round(20 / 8)) % 65535;
+                }
+                else {
+                    dischargeA = false;
+                    dischargeB = false;
+                    timer1OCR = (timer1Ctr + dutyperiod + Math.round(20 / 8)) % 65535;
+                }
             }
-            let i = 5 / input_resistance;
-            let i_at_v = (i * 5 / voltage) * (1 / 0.77);
-            return voltage / i_at_v;
+            console.log(timer1Ctr, timer1OCR);
         }
 
         function simulateTimeStep(programOutput) {
             time += timestep;
+            timer1InternalCtr += timestep;
+
+            if (timer1InternalCtr > (8 / 12e6)) {
+                timer1InternalCtr -= (8 / 12e6);
+                timer1Ctr = (timer1Ctr + 1) % 65535;
+                if (timer1Ctr == timer1OCR) {
+                    timer1_interrupt(programOutput);
+                    console.log(time, "i");
+                }
+            }
+
             if (programOutput.charge == "a") {
                 let chargeCurrent = getChargeCurrent(voltageA + voltageASub);
                 voltageA += (timestep / capacity) * chargeCurrent;
@@ -146,16 +229,19 @@
                 voltageB += (timestep / capacity) * chargeCurrent;
                 voltageBSub += (timestep / capacity) * chargeCurrent;
             }
-
-            if (programOutput.dischargeA) {
+            dischargeCurrentA = 0;
+            dischargeCurrentB = 0;
+            if (dischargeA) {
                 let r = getEquivalentResistance(voltageA);
                 let discharge = Math.exp(-1 * timestep / ((r * 2) * (capacity)));
+                dischargeCurrentA += 2 * (voltageA * discharge / (2 * r));
                 voltageA = voltageA * discharge;
                 voltageASub = voltageASub * discharge;
             }
-            if (programOutput.dischargeB) {
+            if (dischargeB) {
                 let r = getEquivalentResistance(voltageB);
                 let discharge = Math.exp(-1 * timestep / ((r * 2) * (capacity)));
+                dischargeCurrentB += 2 * (voltageA * discharge / (2 * r));
                 voltageB = voltageB * discharge;
                 voltageBSub = voltageBSub * discharge;
             }
@@ -163,11 +249,24 @@
 
         let programRunTime = 200e-6;
 
+
+        let avgPowerUs = 10000e-6;
+
+
+
+        let avgPowerDataPoints = avgPowerUs / timestep;
+
         function updateChart(programOutput) {
 
             myChart.data.datasets[0].data.push(voltageA);
             myChart.data.datasets[1].data.push(voltageB);
-            // myChart.data.datasets[2].data.push(programOutput.dischargeA || programOutput.dischargeB ? 0 : 5);
+            myChart.data.datasets[2].data.push(dischargeCurrentA + dischargeCurrentB);
+            myChart.data.datasets[3].data.push((dischargeCurrentA * voltageA) + (dischargeCurrentB * voltageB));
+            let avgPower = 0;
+            if (myChart.data.datasets[3].data.length > avgPowerDataPoints) {
+                avgPower = myChart.data.datasets[3].data.slice(-avgPowerDataPoints).reduce((a, b) => a + b, 0) / avgPowerDataPoints;
+            }
+            myChart.data.datasets[4].data.push(avgPower);
             // myChart.data.datasets[3].data.push(voltageBSub);
 
             var length = myChart.data.labels.length;
@@ -175,12 +274,12 @@
             //     d.data = d.data.slice(Math.max(0, length - 500 + 1));
             // }
 
-            myChart.data.labels.push((myChart.data.labels[myChart.data.labels.length - 1] || 0) + 1);
+            myChart.data.labels.push(`${Math.round(time * 1e6)}us`);
             // myChart.data.labels = myChart.data.labels.slice(Math.max(0, length - 500 + 1));
 
         }
 
-        for (let i = 0; i < 500; i++) {
+        for (let i = 0; i < 400; i++) {
             let output = executeProgram(voltageASub, voltageBSub);
             for (let j = 0; j < programRunTime / timestep; j++) {
                 simulateTimeStep(output);

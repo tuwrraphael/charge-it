@@ -39,7 +39,8 @@ static appstate_t appstate = {
 	.power_before = 0,
 	.charge_current_measurement_count = 0,
 	.mppt_direction_down = TRUE,
-	.charge_voltage_sum = 0};
+	.charge_voltage_sum = 0,
+	.discharge_duty_cycle = 100};
 
 #ifdef USE_SIMULATION
 static volatile uint8_t debugstate[10] __attribute__((section(".mysection")));
@@ -117,9 +118,9 @@ static void timer1_init(boolean_t power_save)
 	{
 		timer_clk_src = (1 << CS11);
 #ifdef USE_SIMULATION
-		TIMSK1 |= (1 << ICIE1) | (1 << TOIE1);
+		TIMSK1 |= (1 << ICIE1) | (1 << TOIE1) | (1 << OCIE1B);
 #else
-		TIMSK |= (1 << TICIE1) | (1 << TOIE1);
+		TIMSK |= (1 << TICIE1) | (1 << TOIE1) | (1 << OCIE1B);
 #endif
 	}
 	TCCR1B = (1 << ICES1) | timer_clk_src | (1 << ICNC1);
@@ -229,15 +230,15 @@ static void apply_state(void)
 	if (!appstate.dynamo_shutoff && (PORTB & (1 << DYNAMO_OFF_PIN)) > 0)
 	{
 		PORTB &= ~(1 << DYNAMO_OFF_PIN);
-		if (appstate.turn_on_limit < TURN_ON_LIMIT_MAX)
-		{
-			OCR1B = TCNT1 + appstate.turn_on_limit;
-#ifdef USE_SIMULATION
-			TIMSK1 |= (1 << OCIE1B);
-#else
-			TIMSK |= (1 << OCIE1B);
-#endif
-		}
+// 		if (appstate.turn_on_limit < TURN_ON_LIMIT_MAX)
+// 		{
+// 			OCR1B = TCNT1 + appstate.turn_on_limit;
+// #ifdef USE_SIMULATION
+// 			TIMSK1 |= (1 << OCIE1B);
+// #else
+// 			TIMSK |= (1 << OCIE1B);
+// #endif
+// 		}
 	}
 
 	if (appstate.driving_state == DRIVING_STATE_DRIVING || appstate.driving_state == DRIVING_STATE_STARTING)
@@ -395,7 +396,8 @@ int main(void)
 				app_power_save_count = 0;
 			}
 			// PORTB &= ~(1 << MISO_PIN);
-			if (appstate.charge_current_measurement_count ==99) {
+			if (appstate.charge_current_measurement_count == 99)
+			{
 				debug_appstate(&appstate);
 			}
 		}
@@ -457,14 +459,60 @@ ISR(TIMER1_CAPT_vect, ISR_BLOCK)
 	}
 }
 
+static volatile boolean_t discharging = FALSE;
+
+static uint16_t dutyperiod = 10;
+
 ISR(TIMER1_COMPB_vect, ISR_BLOCK)
 {
-	PORTB |= (1 << DYNAMO_OFF_PIN);
-#ifdef USE_SIMULATION
-	TIMSK1 |= (1 << OCIE1B);
-#else
-	TIMSK |= (1 << OCIE1B);
-#endif
+	if (appstate.discharge_duty_cycle == 100)
+	{
+		if (appstate.discharge_a)
+		{
+			PORTC &= ~(1 << DISCHARGE_A_OFF_PIN);
+		}
+		else
+		{
+			PORTC |= (1 << DISCHARGE_A_OFF_PIN);
+		}
+		if (appstate.discharge_b)
+		{
+			PORTC &= ~(1 << DISCHARGE_B_OFF_PIN);
+		}
+		else
+		{
+			PORTC |= (1 << DISCHARGE_B_OFF_PIN);
+		}
+		OCR1B = TCNT1 + dutyperiod;
+	}
+	else if (appstate.discharge_duty_cycle == 0)
+	{
+		PORTC |= (1 << DISCHARGE_A_OFF_PIN);
+		PORTC |= (1 << DISCHARGE_B_OFF_PIN);
+		OCR1B = TCNT1 + dutyperiod;
+	}
+	else
+	{
+		discharging = !discharging;
+		if (discharging)
+		{
+			if (appstate.discharge_a)
+			{
+				PORTC &= ~(1 << DISCHARGE_A_OFF_PIN);
+			}
+			if (appstate.discharge_b)
+			{
+				PORTC &= ~(1 << DISCHARGE_B_OFF_PIN);
+			}
+			OCR1B = TCNT1 + (appstate.discharge_duty_cycle * dutyperiod) / 100;
+		}
+		else
+		{
+			PORTC |= (1 << DISCHARGE_A_OFF_PIN);
+			PORTC |= (1 << DISCHARGE_B_OFF_PIN);
+			OCR1B = TCNT1 + dutyperiod;
+		}
+	}
 }
 
 ISR(TIMER1_OVF_vect, ISR_BLOCK)

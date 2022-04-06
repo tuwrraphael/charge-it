@@ -109,16 +109,23 @@ static void update_driving_state(appstate_t *appstate, boolean_t app_timer_elaps
 void update_state(appstate_t *appstate,
                   boolean_t app_timer_elapsed)
 {
-    uint16_t max_charge_value = (appstate->max_discharge_value + CHARGE_DISCHARGE_SPAN);
+    appstate->max_discharge_value = VOLTS_TO_ADC(6.5);
+    uint16_t max_charge_value = VOLTS_TO_ADC(8.0); // (appstate->max_discharge_value + CHARGE_DISCHARGE_SPAN);
 
     // boolean_t a_full = appstate->charge_a_value >= max_charge_value;
     // boolean_t b_full = appstate->charge_b_value >= max_charge_value;
     // uint16_t charge_level = appstate->max_discharge_value;
 
-    boolean_t a_empty = appstate->charge_a_value < appstate->max_discharge_value;
-    boolean_t b_empty = appstate->charge_b_value < appstate->max_discharge_value;
+    if (appstate->charge_a_value < appstate->max_discharge_value || appstate->charge_b_value < appstate->max_discharge_value)
+    {
+        appstate->discharge_duty_cycle = appstate->discharge_duty_cycle > 0 ? appstate->discharge_duty_cycle - 1 : 0;
+    }
+    else
+    {
+        appstate->discharge_duty_cycle = appstate->discharge_duty_cycle < 100 ? appstate->discharge_duty_cycle + 1 : 100;
+    }
 
-    if (a_empty || b_empty)
+    if (appstate->charge_a_value < max_charge_value || appstate->charge_b_value < max_charge_value)
     {
         if (appstate->charge_a_value < appstate->charge_b_value)
         {
@@ -131,23 +138,7 @@ void update_state(appstate_t *appstate,
     }
     else
     {
-        boolean_t a_full = appstate->charge_a_value < appstate->max_discharge_value;
-        boolean_t b_full = appstate->charge_b_value < appstate->max_discharge_value;
-        if (!(a_full && b_full))
-        {
-            if (appstate->charge_a_value < appstate->charge_b_value)
-            {
-                appstate->charge_mode = CHARGE_A;
-            }
-            else
-            {
-                appstate->charge_mode = CHARGE_B;
-            }
-        }
-        else
-        {
-            appstate->charge_mode = CHARGE_NONE;
-        }
+        appstate->charge_mode = CHARGE_NONE;
     }
 
     appstate->max_charge_a_value = appstate->charge_a_value > appstate->max_charge_a_value ? appstate->charge_a_value : appstate->max_charge_a_value;

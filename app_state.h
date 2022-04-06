@@ -36,6 +36,7 @@ typedef struct
 
     uint16_t max_discharge_value;
     uint16_t dynamo_frequency;
+    uint16_t discharge_duty_cycle;
 
     driving_state_t driving_state;
     int16_t diff;
