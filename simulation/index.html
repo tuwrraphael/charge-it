@@ -5,7 +5,7 @@
     <title>Dynamo Simulation</title>
     <style>
         body {
-            width: 800px;
+            width: 100%;
         }
     </style>
 </head>
@@ -13,12 +13,26 @@
 <body>
     <button id="start">Run/Stop</button>
     <button id="step">Step</button>
-    <canvas id="myChart" width="400" height="400"></canvas>
-    <pre id="state">
+    <div style="display: flex; flex-direction: row; width: 80%;">
+        <div class="chart-container" style="position: relative; flex-grow: 1; max-width: 50%;">
+            <canvas id="myChart" width="400" height="400"></canvas>
+        </div>
+        <div>
+            <h2>Controls</h2>
+            <div>
+                <label for="resistance">Resistance</label>
+                <div>
+                    <input type="range" id="resistance" min="2" max="100" value="10" step="1">
+                </div>
+            </div>
+            <h2>State</h2>
+            <pre id="state"></pre>
+        </div>
+    </div>
 
-    </pre>
+
     <script type="module" src="index.js"></script>
-    
+
 </body>
 
 </html>

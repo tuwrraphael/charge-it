@@ -126,7 +126,7 @@ function getEquivalentResistance(voltage) {
 
 let avgPowerUs = 1000e-6;
 
-let chartupdate  = 10e-6;
+let chartupdate = 10e-6;
 
 let avgPowerDataPoints = avgPowerUs / chartupdate;
 
@@ -203,8 +203,8 @@ export class Runner {
             voltageBSub = voltageBSub * discharge;
         }
 
-        this.adc.channelValues[0] = (voltageASub * (3 / (13)))/2.56;
-        this.adc.channelValues[1] = (voltageBSub * (3 / (13)))/2.56;
+        this.adc.channelValues[0] = (voltageASub * (3 / (13))) / 2.56;
+        this.adc.channelValues[1] = (voltageBSub * (3 / (13))) / 2.56;
     }
 
     private updateChart() {
@@ -262,7 +262,7 @@ export class Runner {
         //     turnOnLimit: view.getUint8(baseAddress + 25)
         // };
         return {
-            values : this.cpu.data.slice(baseAddress, baseAddress + 10)
+            values: this.cpu.data.slice(baseAddress, baseAddress + 10)
         }
     }
 
@@ -294,3 +294,9 @@ document.querySelector("#step").addEventListener("click", () => {
     runner.simulateTimesteps(400);
     document.querySelector("#state").innerText = JSON.stringify(runner.getAppstate(), null, 4);
 })
+
+document.querySelector("#resistance").addEventListener("input", e => {
+    resistance5v = e.target.value;
+    document.querySelector("[for=resistance]").innerText = `Load Resistance: ${resistance5v}Ω`;
+});
+document.querySelector("[for=resistance]").innerText = `Load Resistance: ${resistance5v}Ω`;
