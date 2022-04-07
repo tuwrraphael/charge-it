@@ -38,6 +38,7 @@ debug_summary_t debug_summary_data = {
 
 void uart_debug_init()
 {
+#ifdef DEBUGUART
     UBRRH = UBRRH_VALUE;
     UBRRL = UBRRL_VALUE;
 
@@ -49,12 +50,15 @@ void uart_debug_init()
 
     UCSRB |= (1 << TXEN);
     UCSRC |= (1 << URSEL) | (1 << UCSZ0) | (1 << UCSZ1);
+#endif
 }
 
 static void uart_putchar(char c)
 {
+#ifdef DEBUGUART
     loop_until_bit_is_set(UCSRA, UDRE);
     UDR = c;
+#endif
 }
 
 static void put_flag(boolean_t b)

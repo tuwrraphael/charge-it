@@ -1,0 +1,20 @@
+{
+  "name": "simulation",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "esbuild index.ts --bundle --outfile=index.js --format=esm --watch"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "avr8js": "^0.18.10",
+    "chart.js": "^3.7.1"
+  },
+  "type": "module",
+  "devDependencies": {
+    "esbuild": "^0.14.32"
+  }
+}

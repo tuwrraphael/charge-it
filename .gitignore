@@ -3,3 +3,7 @@ main.hex
 main.elf
 atmega8.map
 *.FCStd1
+simulation/node_modules
+atmega328p.map
+simulation/index.js
+main.txt

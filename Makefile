@@ -1,8 +1,12 @@
+ifeq ($(strip $(SIMULATION)),TRUE)
+MCU = atmega328p
+else
 MCU = atmega8
+endif
 F_CPU = 12000000
 
 .PHONY: clean
-default: main.hex
+default: main.txt
 
 FILES = build/main.o \
 build/uart_debug.o \
@@ -23,10 +27,16 @@ TEST_CC = g++
 TEST_LD = g++
 TEST_CFLAGS = -Wall -I /usr/include -I /usr/src/gtest -L /usr/local/lib -lpthread -DF_CPU=$(F_CPU)
 
-CFLAGS = -Wall -O3 -DF_CPU=$(F_CPU)UL -mmcu=$(MCU)
+CFLAGS = -Wall -O3 -DF_CPU=$(F_CPU)UL -mmcu=$(MCU) -DLABBENCH
+LDFLAGS = -Wl,-Map=$(MCU).map,--cref
+
+ifeq ($(strip $(SIMULATION)),TRUE)
+CFLAGS += -DUSE_SIMULATION -DLABBENCH
+LDFLAGS += -Wl,--section-start=.mysection=0x800300
+endif
 
 clean:
-	rm -rf build main.hex atmega8.map main.elf
+	rm -rf build main.hex atmega8.map main.elf main.txt atmega328p.map
 
 build:
 	mkdir -p build/tests
@@ -51,7 +61,10 @@ build/%.o: %.c | build Makefile
 	$(CC) $(CFLAGS) -c $< -o $@
 
 main.elf: $(FILES)
-	$(LD) $(CFLAGS) -Wl,-Map=$(MCU).map,--cref -o $@ $^
+	$(LD) $(CFLAGS) $(LDFLAGS) -o $@ $^
+
+main.txt : main.elf
+	cp main.elf main.txt
 
 main.hex: main.elf
 	avr-objcopy -O ihex -j .text -j .data main.elf main.hex

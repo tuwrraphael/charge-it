@@ -25,7 +25,7 @@ static appstate_t appstate = {
 	.charge_a_value = 0,
 	.charge_b_value = 0,
 	.dynamo_frequency = 0,
-	.max_discharge_value = MAX_CHARGE_VALUE-CHARGE_DISCHARGE_SPAN,
+	.max_discharge_value = MAX_CHARGE_VALUE - CHARGE_DISCHARGE_SPAN,
 	.driving_state = DRIVING_STATE_STOPPED,
 	.is_braking = 0,
 	.avg = 0,
@@ -35,6 +35,9 @@ static appstate_t appstate = {
 	.max_charge_a_value = 0,
 	.max_charge_b_value = 0,
 	.turn_on_limit = TURN_ON_LIMIT_MAX};
+#ifdef USE_SIMULATION
+static uint8_t debugstate[10] __attribute__((section(".mysection")));
+#endif
 
 #define ADMUX_BASE ((1 << REFS0) | (1 << REFS1))
 
@@ -90,22 +93,37 @@ static void timer1_init(boolean_t power_save)
 	if (power_save)
 	{
 		timer_clk_src = (1 << CS10) | (1 << CS12);
+#ifdef USE_SIMULATION
+		TIMSK1 |= (1 << ICIE1);
+		TIMSK1 &= ~(1 << TOIE1);
+#else
 		TIMSK |= (1 << TICIE1);
 		TIMSK &= ~(1 << TOIE1);
+#endif
 	}
 	else
 	{
 		timer_clk_src = (1 << CS11);
+#ifdef USE_SIMULATION
+		TIMSK1 |= (1 << ICIE1) | (1 << TOIE1);
+#else
 		TIMSK |= (1 << TICIE1) | (1 << TOIE1);
+#endif
 	}
 	TCCR1B = (1 << ICES1) | timer_clk_src | (1 << ICNC1);
 }
 
 static void timer2_init()
 {
+#ifdef USE_SIMULATION
+	TCCR2B = (1 << CS22);
+	OCR2B = DIM_LIGHT_OCR;
+	TIMSK2 |= (1 << TOIE2) | (1 << OCIE2B);
+#else
 	TCCR2 = (1 << CS22);
 	OCR2 = DIM_LIGHT_OCR;
 	TIMSK |= (1 << TOIE2) | (1 << OCIE2);
+#endif
 }
 
 static void io_init()
@@ -202,7 +220,11 @@ static void apply_state()
 		if (appstate.turn_on_limit < TURN_ON_LIMIT_MAX)
 		{
 			OCR1B = TCNT1 + appstate.turn_on_limit;
+#ifdef USE_SIMULATION
+			TIMSK1 |= (1 << OCIE1B);
+#else
 			TIMSK |= (1 << OCIE1B);
+#endif
 		}
 	}
 
@@ -354,6 +376,11 @@ int main(void)
 			// PORTB &= ~(1 << MISO_PIN);
 			debug_appstate(&appstate);
 		}
+#ifdef USE_SIMULATION
+		debugstate[0] = appstate.driving_state;
+		debugstate[1] = appstate.max_discharge_value & 0xFF;
+		debugstate[2] = (appstate.max_discharge_value >> 8) & 0xFF;
+#endif
 		if (task_flags == 0)
 		{
 			set_sleep_mode(SLEEP_MODE_IDLE);
@@ -398,7 +425,11 @@ ISR(TIMER1_CAPT_vect)
 ISR(TIMER1_COMPB_vect)
 {
 	PORTB |= (1 << DYNAMO_OFF_PIN);
+#ifdef USE_SIMULATION
+	TIMSK1 |= (1 << OCIE1B);
+#else
 	TIMSK |= (1 << OCIE1B);
+#endif
 }
 
 ISR(TIMER1_OVF_vect)
@@ -429,8 +460,13 @@ ISR(TIMER2_OVF_vect)
 	}
 }
 
+#ifdef USE_SIMULATION
+ISR(TIMER2_COMPB_vect)
+{
+#else
 ISR(TIMER2_COMP_vect)
 {
+#endif
 	if (appstate.light_requested)
 	{
 #ifndef DEBUGUART
