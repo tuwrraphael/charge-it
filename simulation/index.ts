@@ -175,7 +175,11 @@ export class Runner {
         let chargeB = (this.portC.pinState(4)) == PinState.High;
         let dischargeA = (this.portC.pinState(3)) == PinState.Low;
         let dischargeB = (this.portC.pinState(5)) == PinState.Low;
-        if (chargeA && !chargeB) {
+        let dynamoShutoff = (this.portB.pinState(2)) == PinState.High;
+        if (dynamoShutoff) {
+
+        }
+        else if (chargeA && !chargeB) {
             let chargeCurrent = getChargeCurrent(voltageA + voltageASub);
             voltageA += (timestep / capacity) * chargeCurrent;
             voltageASub += (timestep / capacity) * chargeCurrent;
@@ -261,8 +265,26 @@ export class Runner {
         //     maxChargeBValue: view.getUint16(baseAddress + 24, true),
         //     turnOnLimit: view.getUint8(baseAddress + 25)
         // };
+
+        let drivingState;
+        switch (this.cpu.dataView.getUint8(baseAddress)) {
+            case 0:
+                drivingState = "starting";
+                break;
+            case 1:
+                drivingState = "driving";
+                break;
+            case 2:
+                drivingState = "stopped";
+                break;
+            case 3:
+                drivingState = "stopping";
+                break;
+        }
         return {
-            values: this.cpu.data.slice(baseAddress, baseAddress + 10)
+
+            drivingState: drivingState,
+            maxDischargeValue: this.cpu.dataView.getUint16(baseAddress + 1, true)
         }
     }
 
@@ -277,12 +299,23 @@ let runner = new Runner(program);
 
 var interval = null;
 
+function applyState() {
+    var state = runner.getAppstate();
+
+    document.querySelector("#chargeA").innerText = runner.portC.pinState(2) == PinState.High ? "ON" : "OFF";
+    document.querySelector("#chargeB").innerText = runner.portC.pinState(4) == PinState.High ? "ON" : "OFF";
+    document.querySelector("#dischargeA").innerText = runner.portC.pinState(3) == PinState.Low ? "ON" : "OFF";
+    document.querySelector("#dischargeB").innerText = runner.portC.pinState(5) == PinState.Low ? "ON" : "OFF";
+    document.querySelector("#dynamoOff").innerText = runner.portB.pinState(2) == PinState.High ? "ON" : "OFF";
+    document.querySelector("#drivingState").innerText = state.drivingState;
+    document.querySelector("#maxDischargeValue").innerText = state.maxDischargeValue;
+}
 
 document.querySelector("#start").addEventListener("click", () => {
     if (interval == null) {
         interval = setInterval(() => {
             runner.simulateTimesteps(100000);
-            document.querySelector("#state").innerText = JSON.stringify(runner.getAppstate(), null, 4);
+            applyState();
         }, 100);
     } else {
         clearInterval(interval);
@@ -292,7 +325,7 @@ document.querySelector("#start").addEventListener("click", () => {
 
 document.querySelector("#step").addEventListener("click", () => {
     runner.simulateTimesteps(400);
-    document.querySelector("#state").innerText = JSON.stringify(runner.getAppstate(), null, 4);
+    applyState();
 })
 
 document.querySelector("#resistance").addEventListener("input", e => {
