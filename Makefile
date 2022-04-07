@@ -63,8 +63,8 @@ build/%.o: %.c | build Makefile
 main.elf: $(FILES)
 	$(LD) $(CFLAGS) $(LDFLAGS) -o $@ $^
 
-main.txt : main.elf
-	cp main.elf main.txt
+main.txt : main.hex
+	cp main.hex main.txt
 
 main.hex: main.elf
 	avr-objcopy -O ihex -j .text -j .data main.elf main.hex

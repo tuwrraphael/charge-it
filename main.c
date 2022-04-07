@@ -36,7 +36,7 @@ static appstate_t appstate = {
 	.max_charge_b_value = 0,
 	.turn_on_limit = TURN_ON_LIMIT_MAX};
 #ifdef USE_SIMULATION
-static uint8_t debugstate[10] __attribute__((section(".mysection")));
+static volatile uint8_t debugstate[10] __attribute__((section(".mysection")));
 #endif
 
 #define ADMUX_BASE ((1 << REFS0) | (1 << REFS1))
