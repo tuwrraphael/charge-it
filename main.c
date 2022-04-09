@@ -380,6 +380,8 @@ int main(void)
 		debugstate[0] = appstate.driving_state;
 		debugstate[1] = appstate.max_discharge_value & 0xFF;
 		debugstate[2] = (appstate.max_discharge_value >> 8) & 0xFF;
+		debugstate[4] = appstate.dynamo_frequency & 0xFF;
+		debugstate[5] = (appstate.dynamo_frequency >> 8) & 0xFF;
 #endif
 		if (task_flags == 0)
 		{

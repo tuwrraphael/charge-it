@@ -10,7 +10,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "avr8js": "^0.18.10",
+    "avr8js": "file:../../avr8js-0.18.10.tgz",
     "chart.js": "^3.7.1"
   },
   "type": "module",

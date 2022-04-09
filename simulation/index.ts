@@ -13,12 +13,14 @@ import {
     adcConfig,
     PinState
 } from "avr8js";
-import { CategoryScale, Chart, LinearScale, LineController, LineElement, PointElement } from "chart.js";
+import { CategoryScale, Chart, LinearScale, LineController, LineElement, PointElement, Tooltip, Legend } from "chart.js";
 Chart.register([LineController,
     CategoryScale,
     LinearScale,
     PointElement,
-    LineElement]);
+    LineElement,
+    Tooltip,
+    Legend]);
 
 import program from "../main.txt";
 
@@ -71,6 +73,13 @@ const myChart = new Chart(ctx, {
             backgroundColor: "#00FF00",
             data: [],
             pointRadius: 0
+        },
+        {
+            label: "Dynamo Frequency",
+            borderColor: "#000000",
+            backgroundColor: "#000000",
+            data: [],
+            pointRadius: 0
         }],
         labels: []
     },
@@ -100,7 +109,7 @@ function getChargeCurrent(voltage) {
     return (0.2254 * voltage ** 2 - 25.262 * voltage + 611.12) / 1000;
 }
 
-const drivingSpeedKmh = 25;
+let initialSpeed = 25;
 
 const initialCapacitorVoltage = 4;
 
@@ -111,7 +120,7 @@ let voltageBSub = initialCapacitorVoltage;
 
 let charge_before = null;
 
-const timestep = 1 / 12e6;
+const cpuCycleTimeStep = 1 / 12e6;
 
 function getEquivalentResistance(voltage) {
     // let input_resistance = time < 2500 * timestep ? 1000 : 8;
@@ -140,8 +149,10 @@ export class Runner {
     readonly adc: AVRADC;
     private time = 0;
     private lastChartUpdate = 0;
-
-    private stopped = false;
+    private dynamoPeriod: number;
+    private dynamoPosition = 0;
+    private dynamoVoltage = 0;
+    dynamoFrequency = 0;
 
     constructor(hex: string) {
         loadHex(hex, new Uint8Array(this.program.buffer));
@@ -153,15 +164,22 @@ export class Runner {
         this.adc = new AVRADC(this.cpu, adcConfig);
         this.portB.setPin(3, false);
         this.portB.setPin(5, false);
+        this.setSpeed(25);
+    }
+
+    setSpeed(kmh: number) {
+        this.dynamoFrequency = (16.324 * kmh - 2e-13);
     }
 
     simulateTimesteps(nr: number) {
-        this.stopped = false;
+        this.dynamoPeriod = (1 / this.dynamoFrequency);
         for (let i = 0; i < nr; i++) {
+            var cycles = this.cpu.cycles;
             avrInstruction(this.cpu);
             this.cpu.tick();
-            this.simulateTimeStep();
-            this.time += timestep;
+            let timeAdvanced = (this.cpu.cycles - cycles) * cpuCycleTimeStep;
+            this.simulateTimeStep(timeAdvanced);
+            this.time += timeAdvanced;
             if (this.time - this.lastChartUpdate > chartupdate) {
                 this.updateChart();
                 this.lastChartUpdate = this.time;
@@ -170,7 +188,10 @@ export class Runner {
         myChart.update();
     }
 
-    private simulateTimeStep() {
+    private simulateTimeStep(timestep: number) {
+        this.dynamoPosition += timestep;
+        var dynamoAngle = this.dynamoPosition / this.dynamoPeriod * 2 * Math.PI;
+        this.dynamoVoltage = Math.sin(dynamoAngle) * (voltageA + voltageASub);
         let chargeA = (this.portC.pinState(2)) == PinState.High;
         let chargeB = (this.portC.pinState(4)) == PinState.High;
         let dischargeA = (this.portC.pinState(3)) == PinState.Low;
@@ -209,6 +230,8 @@ export class Runner {
 
         this.adc.channelValues[0] = (voltageASub * (3 / (13))) / 2.56;
         this.adc.channelValues[1] = (voltageBSub * (3 / (13))) / 2.56;
+        var dynamoSensePinState = Math.max(Math.min(this.dynamoVoltage, 3.6), 0) > 2.5 ? true : false;
+        this.portB.setPin(0, dynamoSensePinState);
     }
 
     private updateChart() {
@@ -223,13 +246,14 @@ export class Runner {
         }
         myChart.data.datasets[4].data.push(avgPower);
         // myChart.data.datasets[3].data.push(voltageBSub);
+        myChart.data.datasets[5].data.push(this.dynamoVoltage);
 
         var length = myChart.data.labels.length;
         for (let d of myChart.data.datasets) {
             d.data = d.data.slice(Math.max(0, length - 500 + 1));
         }
 
-        myChart.data.labels.push(`${Math.round(this.time * 1e3)}ms`);
+        myChart.data.labels.push(`${Math.round(this.time * 1e3 * 100) / 100}ms`);
         myChart.data.labels = myChart.data.labels.slice(Math.max(0, length - 500 + 1));
 
     }
@@ -284,12 +308,9 @@ export class Runner {
         return {
 
             drivingState: drivingState,
-            maxDischargeValue: this.cpu.dataView.getUint16(baseAddress + 1, true)
+            maxDischargeValue: this.cpu.dataView.getUint16(baseAddress + 1, true),
+            dynamoFrequency: this.cpu.dataView.getUint16(baseAddress + 4, true),
         }
-    }
-
-    stop() {
-        this.stopped = true;
     }
 }
 
@@ -309,6 +330,7 @@ function applyState() {
     document.querySelector("#dynamoOff").innerText = runner.portB.pinState(2) == PinState.High ? "ON" : "OFF";
     document.querySelector("#drivingState").innerText = state.drivingState;
     document.querySelector("#maxDischargeValue").innerText = state.maxDischargeValue;
+    document.querySelector("#dynamoFrequency").innerText = state.dynamoFrequency;
 }
 
 document.querySelector("#start").addEventListener("click", () => {
@@ -333,3 +355,9 @@ document.querySelector("#resistance").addEventListener("input", e => {
     document.querySelector("[for=resistance]").innerText = `Load Resistance: ${resistance5v}Ω`;
 });
 document.querySelector("[for=resistance]").innerText = `Load Resistance: ${resistance5v}Ω`;
+document.querySelector("#speed").addEventListener("input", e => {
+    runner.setSpeed(e.target.value);
+    document.querySelector("[for=speed]").innerText = `Driving Speed: ${e.target.value}km/h (${Math.round(runner.dynamoFrequency)}Hz)`;
+});
+runner.setSpeed(initialSpeed);
+document.querySelector("[for=speed]").innerText = `Driving Speed: ${initialSpeed}km/h (${Math.round(runner.dynamoFrequency)}Hz)`;
