@@ -73,6 +73,23 @@ static void put_flag(boolean_t b)
     }
 }
 
+static void put_uint32(uint32_t nr)
+{
+    char buf[10];
+    memset(buf, ' ', 10);
+    utoa(nr, buf, 10);
+    uart_putchar(buf[0]);
+    uart_putchar(buf[1]);
+    uart_putchar(buf[2]);
+    uart_putchar(buf[3]);
+    uart_putchar(buf[4]);
+    uart_putchar(buf[5]);
+    uart_putchar(buf[6]);
+    uart_putchar(buf[7]);
+    uart_putchar(buf[8]);
+    uart_putchar(buf[9]);
+}
+
 static void put_uint16(uint16_t nr)
 {
     char buf[5];
@@ -149,17 +166,17 @@ void debug_appstate(appstate_t *appstate)
     // put_uint16(appstate->charge_b_value);
     // put_uint16(appstate->max_discharge_value);
     // uart_putchar(' ');
-    put_uint16(appstate->charge_current_measurement_sum);
+    put_uint32(moving_average_get_variance(&appstate->output_voltage_noise_moving_average));
     uart_putchar(' ');
-    put_uint8(appstate->charge_current_measurement_count);
+    put_uint16(appstate->output_voltage_noise_moving_average.avg);
     uart_putchar(' ');
-    put_flag(appstate->mppt_direction_down);
+    put_uint16(appstate->mppt_step_down_size);
     uart_putchar(' ');
-    put_uint16(appstate->max_discharge_value);
+    put_uint16(appstate->mppt_step_up_size);
     uart_putchar(' ');
-    put_uint16(appstate->charge_voltage_sum);
+    put_uint16(appstate->output_voltage_step_before);
     uart_putchar(' ');
-    put_uint16(appstate->power_before);
+    put_uint16(OCR1A);
     uart_putchar('\r');
     uart_putchar('\n');
 #endif

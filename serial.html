@@ -187,30 +187,36 @@
             type: 'line',
             data: {
                 datasets: [{
-                    label: "Current",
-                    borderColor: "#00F",
-                    backgroundColor: "#00F",
+                    label: "Output Voltage Noise max",
+                    borderColor: "blue",
+                    backgroundColor: "blue",
+                    data: []
+                }, {
+                    label: "Voltage Before",
+                    borderColor: "red",
+                    backgroundColor: "red",
                     data: []
                 }, {
                     label: "Voltage",
-                    borderColor: "#000077",
-                    backgroundColor: "#000077",
+                    borderColor: "green",
+                    backgroundColor: "green",
                     data: []
                 }, {
-                    label: "Power",
-                    borderColor: "#FF0000",
-                    backgroundColor: "#FF0000",
-                    data: []
-                }, {
-                    label: "ChargeA Max",
-                    borderColor: "#440011",
-                    backgroundColor: "#440011",
+                    label: "Step Down Size",
+                    borderColor: "orange",
+                    backgroundColor: "orange",
                     data: []
                 },
                 {
-                    label: "Leistung Kontrolle",
-                    borderColor: "#440011",
-                    backgroundColor: "#440011",
+                    label: "OCR1A",
+                    borderColor: "black",
+                    backgroundColor: "black",
+                    data: []
+                },
+                {
+                    label: "Step Up Size",
+                    borderColor: "purple",
+                    backgroundColor: "purple",
                     data: []
                 }],
                 labels: []
@@ -234,11 +240,12 @@
 
         function updateChart2(value) {
 
-            myChart2.data.datasets[0].data.push((value[0] / 10) / 1000);
-            myChart2.data.datasets[1].data.push(value[3] * (13 * 2.56) / (1023 * 3));
-            myChart2.data.datasets[2].data.push(value[5] / 1000);
-            myChart2.data.datasets[3].data.push(value[4] / (1000));
-            myChart2.data.datasets[4].data.push(value[4] / (1000) * (value[0] / 10) / 1000);
+            myChart2.data.datasets[0].data.push(Math.sqrt(value[0])/1000);
+            myChart2.data.datasets[1].data.push(value[1] / 1000);
+            myChart2.data.datasets[2].data.push(value[4] / 1000);
+            myChart2.data.datasets[3].data.push(value[2]/40*5);
+            myChart2.data.datasets[5].data.push(value[3]/40*5);
+            myChart2.data.datasets[4].data.push((value[5]/0x1FF) * 5);
 
             var length = myChart2.data.labels.length;
             for (let d of myChart2.data.datasets) {
@@ -247,9 +254,9 @@
 
             myChart2.data.labels.push((myChart2.data.labels[myChart2.data.labels.length - 1] || 0) + 1);
             myChart2.data.labels = myChart2.data.labels.slice(Math.max(0, length - 100 + 1));
-            if (myChart2.data.labels[0] % 10 == 0) {
+            // if (myChart2.data.labels[0] % 10 == 0) {
                 myChart2.update();
-            }
+            // }
         }
 
         function updateChart(value) {

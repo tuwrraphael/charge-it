@@ -19,7 +19,8 @@ TEST_FILES = \
 build/tests/moving_average.o \
 build/tests/convert_to_dynamo_rpm.o \
 build/tests/charge_current.o \
-build/tests/test_charge_current.o
+build/tests/test_charge_current.o \
+build/tests/test_moving_average.o 
 
 CC = avr-gcc
 LD = avr-gcc
@@ -28,7 +29,7 @@ TEST_CC = g++
 TEST_LD = g++
 TEST_CFLAGS = -Wall -I /usr/include -I /usr/src/gtest -L /usr/local/lib -lpthread -DF_CPU=$(F_CPU)
 
-CFLAGS = -Wall -Wstrict-prototypes -frename-registers -fshort-enums -fpack-struct -funsigned-char -funsigned-bitfields -std=c99 -O3 -DF_CPU=$(F_CPU)UL -mmcu=$(MCU) -DLABBENCH
+CFLAGS = -Wall -Wstrict-prototypes -frename-registers -fshort-enums -fpack-struct -funsigned-char -funsigned-bitfields -std=c99 -Os -DF_CPU=$(F_CPU)UL -mmcu=$(MCU) -DLABBENCH -DDEBUGUART
 LDFLAGS = -Wl,-Map=$(MCU).map,--cref 
 
 ifeq ($(strip $(SIMULATION)),TRUE)

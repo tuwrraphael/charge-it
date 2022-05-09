@@ -38,6 +38,8 @@ function loadHex(source: string, target: Uint8Array) {
 
 const FLASH_SIZE = 0x6000;
 
+const capacitorESR = 0.14 / (2 * Math.PI * 120 * 470e-6);
+
 const ctx = document.getElementById('myChart').getContext('2d');
 const myChart = new Chart(ctx, {
     type: 'line',
@@ -55,7 +57,7 @@ const myChart = new Chart(ctx, {
             data: [],
             pointRadius: 0
         }, {
-            label: "Discharge Current",
+            label: "Capacitor Discharge Current",
             borderColor: "#FF0000",
             backgroundColor: "#FF0000",
             data: [],
@@ -68,7 +70,7 @@ const myChart = new Chart(ctx, {
             pointRadius: 0
         },
         {
-            label: "Avg Discharge Power",
+            label: "Avg Resistor Discharge Power",
             borderColor: "#00FF00",
             backgroundColor: "#00FF00",
             data: [],
@@ -79,8 +81,44 @@ const myChart = new Chart(ctx, {
             borderColor: "#000000",
             backgroundColor: "#000000",
             data: [],
+            pointRadius: 0,
+            hidden: true
+        }, {
+            label: "Charge Current",
+            borderColor: "#AA0000",
+            backgroundColor: "#AA0000",
+            data: [],
             pointRadius: 0
-        }],
+        },
+        {
+            label: "Output Capacitor Voltage",
+            borderColor: "orange",
+            backgroundColor: "orange",
+            data: [],
+            pointRadius: 0
+        },
+        {
+            label: "Charge Power",
+            borderColor: "lightblue",
+            backgroundColor: "lightblue",
+            data: [],
+            pointRadius: 0
+        },
+        {
+            label: "Resistor Discharge Current",
+            borderColor: "fuchsia",
+            backgroundColor: "fuchsia",
+            data: [],
+            pointRadius: 0
+        },
+        {
+            label: "Resistor Discharge Power",
+            borderColor: "darkgreen",
+            backgroundColor: "darkgreen",
+            data: [],
+            pointRadius: 0
+        }
+        ],
         labels: []
     },
     options: {
@@ -133,11 +171,30 @@ function getEquivalentResistance(voltage) {
     return resistance5v;
 }
 
-let avgPowerUs = 1000e-6;
+let avgPowerUs = 500e-6;
 
 let chartupdate = 10e-6;
 
 let avgPowerDataPoints = avgPowerUs / chartupdate;
+
+let chargeCurrentABefore = 0;
+let chargeCurrentBBefore = 0;
+
+let maxChargeVoltage = 14.6;
+let maxChargeCurrent = 0.2;
+
+let outputCapacity = 100e-6;
+
+function getChargeCapCurrent(capacitorVoltage, timestep) {
+    if ((maxChargeVoltage / 2) <= capacitorVoltage) {
+        return 0;
+    }
+    let c = (((maxChargeVoltage / 2) - capacitorVoltage) / (0.6 + capacitorESR)) * Math.exp(-timestep / capacity);
+    if (c > maxChargeCurrent) {
+        return maxChargeCurrent;
+    }
+    return c;
+}
 
 export class Runner {
     program = new Uint16Array(FLASH_SIZE);
@@ -153,6 +210,10 @@ export class Runner {
     private dynamoPosition = 0;
     private dynamoVoltage = 0;
     dynamoFrequency = 0;
+    private chargeCurrent = 0;
+    private outputCapacitorVoltage = 0.001;
+    private outputCapacitorCurrent = 0;
+    private resistorCurrent = 0;
 
     constructor(hex: string) {
         loadHex(hex, new Uint8Array(this.program.buffer));
@@ -197,39 +258,56 @@ export class Runner {
         let dischargeA = (this.portC.pinState(3)) == PinState.Low;
         let dischargeB = (this.portC.pinState(5)) == PinState.Low;
         let dynamoShutoff = (this.portB.pinState(2)) == PinState.High;
+        this.chargeCurrent = 0;
         if (dynamoShutoff) {
 
         }
         else if (chargeA && !chargeB) {
-            let chargeCurrent = getChargeCurrent(voltageA + voltageASub);
-            voltageA += (timestep / capacity) * chargeCurrent;
-            voltageASub += (timestep / capacity) * chargeCurrent;
+
+            // let chargeCurrent = getChargeCurrent(voltageA + voltageASub - ((0.6 + capacitorESR) * chargeCurrentABefore));
+            // chargeCurrentABefore = chargeCurrent;
+
+            voltageA += (timestep / capacity) * getChargeCapCurrent(voltageA, timestep);
+            voltageASub += (timestep / capacity) * getChargeCapCurrent(voltageASub, timestep);
+            this.chargeCurrent = getChargeCapCurrent(voltageA, timestep);
         } else if (chargeB && !chargeA) {
-            let chargeCurrent = getChargeCurrent(voltageB + voltageBSub);
-            voltageB += (timestep / capacity) * chargeCurrent;
-            voltageBSub += (timestep / capacity) * chargeCurrent;
+            // let chargeCurrent = getChargeCurrent(voltageB + voltageBSub - ((0.6 + capacitorESR) * chargeCurrentBBefore));
+            // chargeCurrentBBefore = chargeCurrent;
+            voltageB += (timestep / capacity) * getChargeCapCurrent(voltageB, timestep);
+            voltageBSub += (timestep / capacity) * getChargeCapCurrent(voltageBSub, timestep);
+            this.chargeCurrent = getChargeCapCurrent(voltageA, timestep);
         } else if (chargeA && chargeB) {
-            console.error("charging both!");
+            throw "charging both!";
         }
         dischargeCurrentA = 0;
         dischargeCurrentB = 0;
+        let r = getEquivalentResistance(this.outputCapacitorVoltage);
+        this.resistorCurrent = this.outputCapacitorVoltage / r;
+        this.outputCapacitorCurrent = -1 * this.resistorCurrent;
+
+        let dischargeR = 0.4 + 2* capacitorESR;
+        if (dischargeA && dischargeB) {
+            // throw "discharging both!";
+        }
         if (dischargeA) {
-            let r = getEquivalentResistance(voltageA);
-            let discharge = Math.exp(-1 * timestep / ((r * 2) * (capacity)));
-            dischargeCurrentA += 2 * (voltageA * discharge / (2 * r));
-            voltageA = voltageA * discharge;
-            voltageASub = voltageASub * discharge;
+            let dischargeCurrent = (voltageA - this.outputCapacitorVoltage) / (dischargeR ** 2 / (2 * dischargeR));
+            voltageA -= (timestep / capacity) * (dischargeCurrent / 2);
+            voltageASub -= (timestep / capacity) * (dischargeCurrent / 2);
+            this.outputCapacitorCurrent += dischargeCurrent;
+            dischargeCurrentA = dischargeCurrent;
         }
         if (dischargeB) {
-            let r = getEquivalentResistance(voltageB);
-            let discharge = Math.exp(-1 * timestep / ((r * 2) * (capacity)));
-            dischargeCurrentB += 2 * (voltageA * discharge / (2 * r));
-            voltageB = voltageB * discharge;
-            voltageBSub = voltageBSub * discharge;
+            let dischargeCurrent = (voltageB - this.outputCapacitorVoltage) / (dischargeR ** 2 / (2 * dischargeR));
+            voltageB -= (timestep / capacity) * (dischargeCurrent / 2);
+            voltageBSub -= (timestep / capacity) * (dischargeCurrent / 2);
+            this.outputCapacitorCurrent += dischargeCurrent;
+            dischargeCurrentB = dischargeCurrent;
         }
 
-        this.adc.channelValues[0] = (voltageASub * (3 / (13))) / 2.56;
-        this.adc.channelValues[1] = (voltageBSub * (3 / (13))) / 2.56;
+        this.outputCapacitorVoltage += (timestep / outputCapacity) * (this.outputCapacitorCurrent);
+
+        this.adc.channelValues[0] = ((voltageASub * (3 / (13))) / 2.56) * this.adc.referenceVoltage;
+        this.adc.channelValues[1] = ((this.outputCapacitorVoltage * (3 / (13))) / 2.56) * this.adc.referenceVoltage;
         var dynamoSensePinState = Math.max(Math.min(this.dynamoVoltage, 3.6), 0) > 2.5 ? true : false;
         this.portB.setPin(0, dynamoSensePinState);
     }
@@ -239,14 +317,28 @@ export class Runner {
         myChart.data.datasets[0].data.push(voltageA);
         myChart.data.datasets[1].data.push(voltageB);
         myChart.data.datasets[2].data.push(dischargeCurrentA + dischargeCurrentB);
-        myChart.data.datasets[3].data.push((dischargeCurrentA * voltageA) + (dischargeCurrentB * voltageB));
-        let avgPower = 0;
-        if (myChart.data.datasets[3].data.length > avgPowerDataPoints) {
-            avgPower = myChart.data.datasets[3].data.slice(-avgPowerDataPoints).reduce((a, b) => a + b, 0) / avgPowerDataPoints;
-        }
-        myChart.data.datasets[4].data.push(avgPower);
+        myChart.data.datasets[3].data.push(this.outputCapacitorCurrent * this.outputCapacitorVoltage);
+
         // myChart.data.datasets[3].data.push(voltageBSub);
         myChart.data.datasets[5].data.push(this.dynamoVoltage);
+        myChart.data.datasets[6].data.push(this.chargeCurrent);
+        myChart.data.datasets[7].data.push(this.outputCapacitorVoltage);
+        let chargeA = (this.portC.pinState(2)) == PinState.High;
+        let chargeB = (this.portC.pinState(4)) == PinState.High;
+        if (chargeA) {
+            myChart.data.datasets[8].data.push((voltageA + voltageASub) * this.chargeCurrent);
+        } else if (chargeB) {
+            myChart.data.datasets[8].data.push((voltageB + voltageBSub) * this.chargeCurrent);
+        } else {
+            myChart.data.datasets[8].data.push(0);
+        }
+        myChart.data.datasets[9].data.push(this.resistorCurrent);
+        myChart.data.datasets[10].data.push(this.outputCapacitorVoltage * this.resistorCurrent);
+        let avgPower = 0;
+        if (myChart.data.datasets[10].data.length > avgPowerDataPoints) {
+            avgPower = myChart.data.datasets[10].data.slice(-avgPowerDataPoints).reduce((a, b) => a + b, 0) / avgPowerDataPoints;
+        }
+        myChart.data.datasets[4].data.push(avgPower);
 
         var length = myChart.data.labels.length;
         for (let d of myChart.data.datasets) {
@@ -257,6 +349,8 @@ export class Runner {
         myChart.data.labels = myChart.data.labels.slice(Math.max(0, length - 500 + 1));
 
     }
+
+    private ocra1 = 0;
 
     getAppstate() {
         let baseAddress = 0x300;
@@ -305,12 +399,26 @@ export class Runner {
                 drivingState = "stopping";
                 break;
         }
-        return {
+        let x = {
 
             drivingState: drivingState,
             maxDischargeValue: this.cpu.dataView.getUint16(baseAddress + 1, true),
             dynamoFrequency: this.cpu.dataView.getUint16(baseAddress + 4, true),
+            chargeMeasurementCount: this.cpu.dataView.getUint8(baseAddress + 3),
+            chargeVoltageSum: this.cpu.dataView.getUint16(baseAddress + 6, true),
+            chargeCurrentSum: this.cpu.dataView.getUint16(baseAddress + 8, true),
+            ocr1a: this.cpu.dataView.getUint16(baseAddress + 10, true),
+            tcnt1: this.timer1.debugTCNT,
+            power: this.cpu.dataView.getUint16(baseAddress + 12, true),
+            mpptDirection: this.cpu.dataView.getUint8(baseAddress + 14) > 0 ? "down" : "up",
+            mpptStepTiming: this.cpu.dataView.getUint16(baseAddress + 15, true),
+            mpptStepSize: this.cpu.dataView.getUint8(baseAddress + 17),
         }
+        if (x.ocr1a != this.ocra1) {
+            console.log(x.power, this.ocra1);
+            this.ocra1 = x.ocr1a;
+        }
+        return x;
     }
 }
 
@@ -331,6 +439,15 @@ function applyState() {
     document.querySelector("#drivingState").innerText = state.drivingState;
     document.querySelector("#maxDischargeValue").innerText = state.maxDischargeValue;
     document.querySelector("#dynamoFrequency").innerText = state.dynamoFrequency;
+    document.querySelector("#chargeMeasurementCount").innerText = state.chargeMeasurementCount;
+    document.querySelector("#chargeVoltageSum").innerText = state.chargeVoltageSum;
+    document.querySelector("#chargeCurrentSum").innerText = state.chargeCurrentSum;
+    document.querySelector("#ocr1a").innerText = state.ocr1a;
+    document.querySelector("#tcnt1").innerText = state.tcnt1;
+    document.querySelector("#power").innerText = state.power;
+    document.querySelector("#mpptDirection").innerText = state.mpptDirection;
+    document.querySelector("#mpptStepTiming").innerText = state.mpptStepTiming;
+    document.querySelector("#mpptStepSize").innerText = state.mpptStepSize;
 }
 
 document.querySelector("#start").addEventListener("click", () => {
@@ -346,7 +463,7 @@ document.querySelector("#start").addEventListener("click", () => {
 })
 
 document.querySelector("#step").addEventListener("click", () => {
-    runner.simulateTimesteps(400);
+    runner.simulateTimesteps(500);
     applyState();
 })
 
@@ -358,6 +475,10 @@ document.querySelector("[for=resistance]").innerText = `Load Resistance: ${resis
 document.querySelector("#speed").addEventListener("input", e => {
     runner.setSpeed(e.target.value);
     document.querySelector("[for=speed]").innerText = `Driving Speed: ${e.target.value}km/h (${Math.round(runner.dynamoFrequency)}Hz)`;
+});
+document.querySelector("#rangeocr1a").addEventListener("input", e => {
+    runner.cpu.writeData(timer1Config.OCRA + 1, e.target.value >> 8 & 0xFF);
+    runner.cpu.writeData(timer1Config.OCRA, e.target.value & 0xFF);
 });
 runner.setSpeed(initialSpeed);
 document.querySelector("[for=speed]").innerText = `Driving Speed: ${initialSpeed}km/h (${Math.round(runner.dynamoFrequency)}Hz)`;

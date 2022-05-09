@@ -2,7 +2,8 @@
 #define APP_CONFIG_H
 
 #define VOLTS_TO_ADC(v) ((v)*1023 * 3 / (13 * 2.56))
-#define ADC_TO_MV(adc) ((adc)* ((13 * 2.56 * 1000) / (1023 * 3)))
+#define ADC_TO_MV(adc) ((adc) * ((13 * 2.56 * 1000) / (1023 * 3)))
+#define ADC_TO_MV_OUTPUT(adc) ((adc) * ((20 * 2.56 * 1000) / (1023 * 10)))
 
 #define TIMER1_PRESCALER (8)
 #define TIMER2_PRESCALER (64)
@@ -34,5 +35,18 @@
 #define DYNAMO_FREQUENCY_STEP_DOWN_TIMING (50)
 #define DYNAMO_FREQUENCY_STEP_UP_TIMING (1)
 #define DYNAMO_FREQUENCY_DANGER_VOLTAGE (DYNAMO_FREQ_TO_CTR(600))
+
+#define MPPT_STEP (SECONDS_TO_TIM2_REVS(0.4))
+#define MAX_MPPT_STEP (8)
+#define MIN_MPPT_STEP (1)
+#define MIN_VOLTAGE_CHANGE (50)
+
+#define MIN_SEARCH_SCAN_INTERVAL_SECONDS (4)
+#define MAX_SEARCH_SCAN_INTERVAL_SECONDS (32)
+#define SEARCH_STEP (10)
+#define SINKING_THRESHOLD (4)
+#define RISING_THRESHOLD (1)
+
+#define PWM_DUTY_CYCLE_MAX (0x1FF)
 
 #endif
