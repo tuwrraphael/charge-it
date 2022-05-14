@@ -14,8 +14,7 @@
                 "-mmcu=atmega8a",
                 "-DF_CPU=12000000UL",
                 "-DDEBUGUART",
-                "-DLABBENCH",
-                "-DUSE_SIMULATION"
+                "-DLABBENCH"
             ]
         }
     ],

@@ -187,7 +187,7 @@
             type: 'line',
             data: {
                 datasets: [{
-                    label: "Output Voltage Noise max",
+                    label: "ORC1A",
                     borderColor: "blue",
                     backgroundColor: "blue",
                     data: []
@@ -197,7 +197,7 @@
                     backgroundColor: "red",
                     data: []
                 }, {
-                    label: "Voltage",
+                    label: "Charge A Value Max",
                     borderColor: "green",
                     backgroundColor: "green",
                     data: []
@@ -208,13 +208,13 @@
                     data: []
                 },
                 {
-                    label: "OCR1A",
+                    label: "OCR1B",
                     borderColor: "black",
                     backgroundColor: "black",
                     data: []
                 },
                 {
-                    label: "Step Up Size",
+                    label: "Charge A Value",
                     borderColor: "purple",
                     backgroundColor: "purple",
                     data: []
@@ -240,11 +240,11 @@
 
         function updateChart2(value) {
 
-            myChart2.data.datasets[0].data.push(Math.sqrt(value[0])/1000);
+            myChart2.data.datasets[0].data.push((value[0]/0x1FF) * 5);
             myChart2.data.datasets[1].data.push(value[1] / 1000);
-            myChart2.data.datasets[2].data.push(value[4] / 1000);
+            myChart2.data.datasets[2].data.push(value[4] * ((13 * 2.56 * 1000) / (1023 * 3))/1000);
             myChart2.data.datasets[3].data.push(value[2]/40*5);
-            myChart2.data.datasets[5].data.push(value[3]/40*5);
+            myChart2.data.datasets[5].data.push(value[3] * ((13 * 2.56 * 1000) / (1023 * 3))/1000);
             myChart2.data.datasets[4].data.push((value[5]/0x1FF) * 5);
 
             var length = myChart2.data.labels.length;

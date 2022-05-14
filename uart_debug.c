@@ -166,17 +166,17 @@ void debug_appstate(appstate_t *appstate)
     // put_uint16(appstate->charge_b_value);
     // put_uint16(appstate->max_discharge_value);
     // uart_putchar(' ');
-    put_uint32(moving_average_get_variance(&appstate->output_voltage_noise_moving_average));
+    put_uint16(OCR1A);
     uart_putchar(' ');
     put_uint16(appstate->output_voltage_noise_moving_average.avg);
     uart_putchar(' ');
     put_uint16(appstate->mppt_step_down_size);
     uart_putchar(' ');
-    put_uint16(appstate->mppt_step_up_size);
+    put_uint16(appstate->charge_a_value);
     uart_putchar(' ');
-    put_uint16(appstate->output_voltage_step_before);
+    put_uint16(appstate->max_charge_a_value);
     uart_putchar(' ');
-    put_uint16(OCR1A);
+    put_uint16(OCR1B);
     uart_putchar('\r');
     uart_putchar('\n');
 #endif

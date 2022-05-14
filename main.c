@@ -21,7 +21,7 @@ static appstate_t appstate = {
 	.discharge_a = FALSE,
 	.discharge_b = FALSE,
 	.light_requested = FALSE,
-	.dynamo_shutoff = FALSE,
+	.dynamo_shutoff_enable = FALSE,
 	.charge_a_value = 0,
 	.max_discharge_value = MAX_CHARGE_VALUE - CHARGE_DISCHARGE_SPAN,
 	.driving_state = DRIVING_STATE_STOPPED,
@@ -31,7 +31,6 @@ static appstate_t appstate = {
 	.cycle_count = 0,
 	.back_off = 0,
 	.max_charge_a_value = 0,
-	.max_charge_b_value = 0,
 	.turn_on_limit = TURN_ON_LIMIT_MAX,
 	.mppt_direction_down = TRUE,
 	.mppt_step_timing = 0,
@@ -44,8 +43,9 @@ static appstate_t appstate = {
 	.search_seconds_count = 0,
 	.search_seconds_counter = 0,
 	.last_search_result = PWM_DUTY_CYCLE_MAX,
-	.scan_mode = TRUE
-};
+	.scan_mode = TRUE,
+	.overvoltage_timing = 0,
+	.limits_exceeded = 0};
 
 #ifdef USE_SIMULATION
 static volatile uint8_t debugstate[20] __attribute__((section(".mysection")));
@@ -53,7 +53,7 @@ static volatile uint8_t debugstate[20] __attribute__((section(".mysection")));
 
 #define ADMUX_BASE ((1 << REFS0) | (1 << REFS1))
 
-static volatile boolean_t next_measurement_a = TRUE;
+static volatile boolean_t last_measurement_b = TRUE;
 
 static uint16_t edge_before = 0;
 static uint16_t frequency_measurement = 0;
@@ -72,28 +72,14 @@ uint8_t app_power_save_count = 0;
 
 static void adc_measure(void)
 {
-	if (next_measurement_a)
-	{
-		ADMUX &= ~(1 << MUX0);
-	}
-	else
-	{
-		ADMUX |= (1 << MUX0);
-	}
-	// while (ADCSRA & (1 << ADSC))
-	// 	;
-	ATOMIC_BLOCK(ATOMIC_FORCEON)
-	{
-		task_flags &= ~(1 << ADC_TASK_FLAG);
-	}
 	ADCSRA |= (1 << ADSC);
 }
 
 static void adc_init(void)
 {
 	ADMUX = ADMUX_BASE;
-	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS0) | (1 << ADPS1);
-	next_measurement_a = TRUE;
+	ADCSRA = (1 << ADEN) | (1 << ADPS2)| (1 << ADPS1);
+	last_measurement_b = TRUE;
 	ADCSRA |= (1 << ADSC);
 	while (ADCSRA & (1 << ADSC))
 		;
@@ -102,6 +88,8 @@ static void adc_init(void)
 
 static void timer1_init(boolean_t power_save)
 {
+	OCR1A = PWM_DUTY_CYCLE_MAX;
+	OCR1B = PWM_DUTY_CYCLE_MAX;
 	TCNT1 = 0;
 	uint8_t timer_clk_src;
 	if (power_save)
@@ -109,20 +97,20 @@ static void timer1_init(boolean_t power_save)
 		timer_clk_src = (1 << CS10) | (1 << CS12);
 #ifdef USE_SIMULATION
 		TIMSK1 |= (1 << ICIE1);
-		TIMSK1 &= ~(1 << TOIE1);
+		TIMSK1 &= ~((1 << TOIE1) | (1 << OCIE1A) | (1 << OCIE1B));
 #else
 		TIMSK |= (1 << TICIE1);
-		TIMSK &= ~(1 << TOIE1);
+		TIMSK &= ~((1 << TOIE1) | (1 << OCIE1A) | (1 << OCIE1B));
 #endif
 		TCCR1A = 0;
 	}
 	else
 	{
-		timer_clk_src = (1<< CS11);
+		timer_clk_src = (1 << CS11);
 #ifdef USE_SIMULATION
-		TIMSK1 |= (1 << ICIE1) | (1 << TOIE1) | (1 << OCIE1A);
+		TIMSK1 |= (1 << ICIE1) | (1 << TOIE1) | (1 << OCIE1A) | (1 << OCIE1B);
 #else
-		TIMSK |= (1 << TICIE1) | (1 << TOIE1) | (1 << OCIE1A);
+		TIMSK |= (1 << TICIE1) | (1 << TOIE1) | (1 << OCIE1A) | (1 << OCIE1B);
 #endif
 		TCCR1A = (1 << WGM11);
 		OCR1A = PWM_DUTY_CYCLE_MAX;
@@ -188,63 +176,6 @@ static void io_init(void)
 
 static void apply_state(void)
 {
-
-	if (appstate.dynamo_shutoff && (PORTB & (1 << DYNAMO_OFF_PIN)) == 0)
-	{
-		PORTB |= (1 << DYNAMO_OFF_PIN);
-	}
-
-	uint8_t new_portc = PORTC;
-
-	// if (appstate.discharge_a)
-	// {
-	// 	new_portc &= ~(1 << DISCHARGE_A_OFF_PIN);
-	// }
-	// else
-	// {
-	// 	new_portc |= (1 << DISCHARGE_A_OFF_PIN);
-	// }
-
-	// if (appstate.discharge_b)
-	// {
-	// 	new_portc &= ~(1 << DISCHARGE_B_OFF_PIN);
-	// }
-	// else
-	// {
-	// 	new_portc |= (1 << DISCHARGE_B_OFF_PIN);
-	// }
-
-	// if (appstate.charge_mode == CHARGE_A)
-	// {
-	// 	new_portc |= (1 << CHARGE_A_ON_PIN);
-	// 	new_portc &= ~(1 << CHARGE_B_ON_PIN);
-	// }
-	// else if (appstate.charge_mode == CHARGE_B)
-	// {
-	// 	new_portc |= (1 << CHARGE_B_ON_PIN);
-	// 	new_portc &= ~(1 << CHARGE_A_ON_PIN);
-	// }
-	// else
-	// {
-	// 	new_portc &= ~(1 << CHARGE_A_ON_PIN);
-	// 	new_portc &= ~(1 << CHARGE_B_ON_PIN);
-	// }
-	PORTC = new_portc;
-
-	if (!appstate.dynamo_shutoff && (PORTB & (1 << DYNAMO_OFF_PIN)) > 0)
-	{
-		PORTB &= ~(1 << DYNAMO_OFF_PIN);
-		if (appstate.turn_on_limit < TURN_ON_LIMIT_MAX)
-		{
-			OCR1B = TCNT1 + appstate.turn_on_limit;
-#ifdef USE_SIMULATION
-			TIMSK1 |= (1 << OCIE1B);
-#else
-			TIMSK |= (1 << OCIE1B);
-#endif
-		}
-	}
-
 	if (appstate.driving_state == DRIVING_STATE_DRIVING || appstate.driving_state == DRIVING_STATE_STARTING)
 	{
 		PORTD &= ~(1 << REG5V_OFF_PIN);
@@ -327,7 +258,7 @@ int main(void)
 				adc_init();
 				timer1_init(FALSE);
 				sei();
-				adc_measure();
+				// adc_measure();
 				moving_average_init(&deceleration_moving_average);
 			}
 		}
@@ -335,11 +266,7 @@ int main(void)
 		{
 			if (task_flags & ADC_TASK_FLAG)
 			{
-				ATOMIC_BLOCK(ATOMIC_FORCEON)
-				{
-					task_flags &= ~ADC_TASK_FLAG;
-				}
-				if (ADMUX & (1 << MUX0))
+				if (last_measurement_b)
 				{
 					appstate.output_voltage_measurement_count++;
 					appstate.output_voltage_sum += ADC_TO_MV_OUTPUT(ADC) / 100;
@@ -347,6 +274,10 @@ int main(void)
 				else
 				{
 					appstate.charge_a_value = ADC;
+				}
+				ATOMIC_BLOCK(ATOMIC_FORCEON)
+				{
+					task_flags &= ~ADC_TASK_FLAG;
 				}
 			}
 			read_inputs();
@@ -431,8 +362,20 @@ int main(void)
 	return 0;
 }
 
+static volatile boolean_t mux_changed = FALSE;
+
 ISR(ADC_vect, ISR_BLOCK)
 {
+	last_measurement_b = ADMUX & (1 << MUX0);
+	if (last_measurement_b)
+	{
+		ADMUX = ADMUX_BASE;
+	}
+	else
+	{
+		ADMUX = ADMUX_BASE | (1 << MUX0);
+	}
+	mux_changed = TRUE;
 	task_flags |= ADC_TASK_FLAG;
 }
 
@@ -470,16 +413,15 @@ ISR(TIMER1_COMPA_vect, ISR_BLOCK)
 
 ISR(TIMER1_COMPB_vect, ISR_BLOCK)
 {
-	PORTB |= (1 << DYNAMO_OFF_PIN);
-#ifdef USE_SIMULATION
-	TIMSK1 |= (1 << OCIE1B);
-#else
-	TIMSK |= (1 << OCIE1B);
-#endif
+	if (appstate.dynamo_shutoff_enable)
+	{
+		PORTB |= (1 << DYNAMO_OFF_PIN);
+	}
 }
 
 ISR(TIMER1_OVF_vect, ISR_BLOCK)
 {
+	PORTB &= ~(1 << DYNAMO_OFF_PIN);
 	if (appstate.charge_mode != CHARGE_B)
 	{
 		appstate.charge_mode = CHARGE_B;
@@ -519,8 +461,14 @@ ISR(TIMER2_OVF_vect, ISR_BLOCK)
 			PORTD &= ~(1 << LED_FRONT_OFF_PIN);
 		}
 	}
-	next_measurement_a = !next_measurement_a;
-	adc_measure();
+	if (mux_changed)
+	{
+		mux_changed = FALSE;
+	}
+	else if ((task_flags & ADC_TASK_FLAG) == 0 && (ADCSRA & (1 << ADSC)) == 0)
+	{
+		adc_measure();
+	}
 }
 
 #ifdef USE_SIMULATION

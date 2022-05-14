@@ -25,7 +25,7 @@ typedef struct
     boolean_t discharge_a;
     boolean_t discharge_b;
     boolean_t light_requested;
-    boolean_t dynamo_shutoff;
+    boolean_t dynamo_shutoff_enable;
     uint16_t charge_a_value;
     
     uint16_t output_voltage_sum;
@@ -50,9 +50,9 @@ typedef struct
     uint8_t cycle_count;
     uint8_t back_off;
     uint16_t max_charge_a_value;
-    uint16_t max_charge_b_value;
-    uint8_t turn_on_limit;
+    uint16_t turn_on_limit;
     uint16_t mppt_step_timing;
+    uint16_t overvoltage_timing;
     uint8_t mppt_step_down_size;
     uint8_t mppt_step_up_size;
 
@@ -66,6 +66,10 @@ typedef struct
     boolean_t scan_mode;
     uint8_t sinking_ctr;
     uint8_t rising_ctr;
+
+    boolean_t overvoltage;
+    uint8_t limits_exceeded;
+    uint16_t overvoltage_step_size;
 
 } appstate_t;
 
