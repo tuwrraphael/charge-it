@@ -7,19 +7,10 @@
 #include "pinout.h"
 #include <avr/io.h>
 
-static boolean_t is_driving(appstate_t *appstate)
+boolean_t is_driving(appstate_t *appstate)
 {
 #ifndef LABBENCH
     return appstate->dynamo_frequency > 0;
-#else
-    return TRUE;
-#endif
-}
-
-static boolean_t is_driving_fast(appstate_t *appstate)
-{
-#ifndef LABBENCH
-    return appstate->dynamo_frequency > DYNAMO_FREQUENCY_DRIVING;
 #else
     return TRUE;
 #endif
@@ -34,51 +25,22 @@ static boolean_t driving_below_danger_voltage(appstate_t *appstate)
 #endif
 }
 
-static void update_driving_state(appstate_t *appstate, boolean_t app_timer_elapsed)
+static void update_charge_state(appstate_t *appstate)
 {
-    switch (appstate->driving_state)
+    switch (appstate->charge_state)
     {
-    case DRIVING_STATE_STOPPED:
-        if (is_driving(appstate))
+    case CHARGE_NONE:
+        if (appstate->charge_a_value > MAX_DISCHARGE_VALUE)
         {
-            appstate->driving_state = DRIVING_STATE_STARTING;
-            appstate->driving_state_timing = 0;
+            appstate->charge_state = CHARGE_STATE_CAP_READY;
         }
         break;
-    case DRIVING_STATE_STARTING:
-        if (appstate->driving_state_timing > DRIVING_THRESHOLD)
+    case CHARGE_STATE_CAP_READY:
+        if (appstate->output_voltage_noise_moving_average.avg > 4500)
         {
-            appstate->driving_state = DRIVING_STATE_DRIVING;
-        }
-        else if (app_timer_elapsed && is_driving_fast(appstate))
-        {
-            appstate->driving_state_timing++;
-        }
-        else if (!is_driving(appstate))
-        {
-            appstate->driving_state = DRIVING_STATE_STOPPED;
+            appstate->charge_state = CHARGE_STATE_5V_READY;
         }
         break;
-    case DRIVING_STATE_DRIVING:
-        if (!is_driving(appstate))
-        {
-            appstate->driving_state = DRIVING_STATE_STOPPING;
-            appstate->driving_state_timing = 0;
-        }
-        break;
-    case DRIVING_STATE_STOPPING:
-        if (appstate->driving_state_timing > STOPPING_THRESHOLD)
-        {
-            appstate->driving_state = DRIVING_STATE_STOPPED;
-        }
-        else if (is_driving(appstate))
-        {
-            appstate->driving_state = DRIVING_STATE_DRIVING;
-        }
-        else if (app_timer_elapsed)
-        {
-            appstate->driving_state_timing++;
-        }
     default:
         break;
     }
@@ -136,15 +98,19 @@ void update_state(appstate_t *appstate,
             debug_uint16(appstate->dynamo_frequency, appstate->is_braking);
             appstate->braking_timing = 0;
             int16_t frequency_diff = appstate->dynamo_frequency_before - appstate->dynamo_frequency;
-            if (frequency_diff > 4)
+            if (frequency_diff > 3)
             {
-                if (appstate->speed_falling_ctr > 2) {
-                appstate->is_braking = BRAKE_LIGHT_TIMING;
+                if (appstate->speed_falling_ctr > 2)
+                {
+                    appstate->is_braking = BRAKE_LIGHT_TIMING;
                 }
-                else {
+                else
+                {
                     appstate->speed_falling_ctr++;
                 }
-            } else {
+            }
+            else
+            {
                 appstate->speed_falling_ctr = 0;
             }
             appstate->dynamo_frequency_before = appstate->dynamo_frequency;
@@ -367,12 +333,14 @@ void update_state(appstate_t *appstate,
 
     appstate->dynamo_shutoff_enable = driving_below_danger_voltage(appstate);
 
-    update_driving_state(appstate, app_timer_elapsed);
-
     if (app_timer_elapsed && appstate->mppt_step_timing < MPPT_STEP)
     {
         appstate->mppt_step_timing++;
     }
+
+    update_charge_state(appstate);
+
+    appstate->dim_front = !is_driving(appstate);
 }
 
 void update_state_powersave(appstate_t *appstate, boolean_t app_timer_elapsed)
@@ -382,5 +350,4 @@ void update_state_powersave(appstate_t *appstate, boolean_t app_timer_elapsed)
     appstate->dynamo_shutoff_enable = FALSE;
     appstate->charge_mode = CHARGE_NONE;
     appstate->is_braking = FALSE;
-    update_driving_state(appstate, app_timer_elapsed);
 }

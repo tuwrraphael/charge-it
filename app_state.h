@@ -13,11 +13,10 @@ typedef enum
 
 typedef enum
 {
-    DRIVING_STATE_STARTING,
-    DRIVING_STATE_DRIVING,
-    DRIVING_STATE_STOPPED,
-    DRIVING_STATE_STOPPING
-} driving_state_t;
+    CHARGE_STATE_NONE = 0,
+    CHARGE_STATE_CAP_READY = 1,
+    CHARGE_STATE_5V_READY = 2
+} charge_state_t;
 
 typedef struct
 {
@@ -27,7 +26,7 @@ typedef struct
     boolean_t light_requested;
     boolean_t dynamo_shutoff_enable;
     uint16_t charge_a_value;
-    
+
     uint16_t output_voltage_sum;
     uint16_t output_voltage_step_before;
     uint16_t output_voltage_last_switch;
@@ -40,15 +39,12 @@ typedef struct
     uint16_t max_discharge_value;
     uint16_t dynamo_frequency;
 
-    driving_state_t driving_state;
     int16_t diff;
     int16_t avg;
     uint16_t braking_timing;
     uint16_t is_braking;
     uint8_t speed_falling_ctr;
     uint16_t dynamo_frequency_before;
-
-    uint16_t driving_state_timing;
 
     uint8_t cycle_count;
     uint8_t back_off;
@@ -73,6 +69,10 @@ typedef struct
     boolean_t overvoltage;
     uint8_t limits_exceeded;
     uint16_t overvoltage_step_size;
+
+    charge_state_t charge_state;
+
+    boolean_t dim_front;
 
 } appstate_t;
 

@@ -22,11 +22,10 @@ static appstate_t appstate = {
 	.dynamo_shutoff_enable = FALSE,
 	.charge_a_value = 0,
 	.max_discharge_value = MAX_CHARGE_VALUE - CHARGE_DISCHARGE_SPAN,
-	.driving_state = DRIVING_STATE_STOPPED,
+	.charge_state = CHARGE_STATE_NONE,
 	.braking_timing = 0,
 	.is_braking = 0,
 	.avg = 0,
-	.driving_state_timing = 0,
 	.cycle_count = 0,
 	.back_off = 0,
 	.max_charge_a_value = 0,
@@ -45,7 +44,8 @@ static appstate_t appstate = {
 	.scan_mode = TRUE,
 	.overvoltage_timing = 0,
 	.limits_exceeded = 0,
-	.speed_falling_ctr = 0};
+	.speed_falling_ctr = 0,
+	.dim_front = FALSE};
 
 #ifdef USE_SIMULATION
 static volatile uint8_t debugstate[20] __attribute__((section(".mysection")));
@@ -180,7 +180,7 @@ static void io_init(void)
 
 static void apply_state(void)
 {
-	if (appstate.driving_state == DRIVING_STATE_DRIVING || appstate.driving_state == DRIVING_STATE_STARTING)
+	if (appstate.charge_state >= CHARGE_STATE_CAP_READY && appstate.dynamo_frequency > 0)
 	{
 		PORTD &= ~(1 << REG5V_OFF_PIN);
 	}
@@ -189,11 +189,11 @@ static void apply_state(void)
 		PORTD |= (1 << REG5V_OFF_PIN);
 	}
 
-	if (appstate.light_requested && appstate.driving_state == DRIVING_STATE_DRIVING)
+	if (appstate.light_requested && appstate.charge_state >= CHARGE_STATE_5V_READY && !appstate.dim_front)
 	{
 		PORTD &= ~(1 << LED_FRONT_OFF_PIN);
 	}
-	else if (!appstate.light_requested || appstate.driving_state != DRIVING_STATE_STOPPING)
+	else if (!appstate.light_requested || appstate.charge_state < CHARGE_STATE_5V_READY)
 	{
 		PORTD |= (1 << LED_FRONT_OFF_PIN);
 	}
@@ -310,7 +310,7 @@ int main(void)
 			}
 			update_state(&appstate, app_timer_elapsed);
 			apply_state();
-			if (appstate.driving_state == DRIVING_STATE_STOPPING)
+			if (appstate.dynamo_frequency == 0)
 			{
 				if (app_power_save_count > 5)
 				{
@@ -337,7 +337,6 @@ int main(void)
 			// }
 		}
 #ifdef USE_SIMULATION
-		debugstate[0] = appstate.driving_state;
 		debugstate[1] = appstate.max_discharge_value & 0xFF;
 		debugstate[2] = (appstate.max_discharge_value >> 8) & 0xFF;
 		debugstate[4] = appstate.dynamo_frequency & 0xFF;
@@ -461,7 +460,7 @@ ISR(TIMER2_OVF_vect, ISR_BLOCK)
 			PORTD &= ~(1 << LED_BACK_OFF_PIN);
 		}
 #endif
-		if (appstate.driving_state == DRIVING_STATE_STOPPING)
+		if (appstate.dim_front)
 		{
 			PORTD &= ~(1 << LED_FRONT_OFF_PIN);
 		}
@@ -494,7 +493,7 @@ ISR(TIMER2_COMP_vect, ISR_BLOCK)
 			PORTD |= (1 << LED_BACK_OFF_PIN);
 		}
 #endif
-		if (appstate.driving_state == DRIVING_STATE_STOPPING)
+		if (appstate.dim_front)
 		{
 			PORTD |= (1 << LED_FRONT_OFF_PIN);
 		}
