@@ -29,7 +29,7 @@ static void update_charge_state(appstate_t *appstate)
 {
     switch (appstate->charge_state)
     {
-    case CHARGE_NONE:
+    case CHARGE_STATE_NONE:
         if (appstate->charge_a_value > MAX_DISCHARGE_VALUE)
         {
             appstate->charge_state = CHARGE_STATE_CAP_READY;
@@ -130,12 +130,8 @@ void update_state(appstate_t *appstate,
             if (appstate->search_seconds_count >= appstate->search_seconds)
             {
                 appstate->search_seconds_count = 0;
-                // appstate->mppt_step_up_size = MAX_MPPT_STEP;
-                // appstate->mppt_step_down_size = MAX_MPPT_STEP;
-                // uint16_t diff = OCR1A > appstate->last_search_result ? OCR1A - appstate->last_search_result : appstate->last_search_result - OCR1A;
                 if (!is_in_overvoltage_protection)
                 {
-
                     start_scan(appstate);
                 }
             }
@@ -205,7 +201,6 @@ void update_state(appstate_t *appstate,
                     }
                     appstate->last_search_result_voltage = appstate->output_voltage_noise_moving_average.avg;
                     appstate->mppt_step_down_size = MAX_MPPT_STEP;
-                    appstate->mppt_step_up_size = MAX_MPPT_STEP;
                 }
             }
             else
@@ -221,13 +216,11 @@ void update_state(appstate_t *appstate,
                     if (appstate->mppt_step_down_size > MIN_MPPT_STEP)
                     {
                         appstate->mppt_step_down_size -= 1;
-                        appstate->mppt_step_up_size -= 1;
                     }
                 }
                 else if ((diff < MIN_VOLTAGE_CHANGE && (0 - MIN_VOLTAGE_CHANGE) > diff) && appstate->mppt_step_down_size < MAX_MPPT_STEP)
                 {
                     appstate->mppt_step_down_size += 1;
-                    appstate->mppt_step_up_size += 1;
                 }
                 uint16_t ocra_step_size = appstate->mppt_step_down_size;
                 boolean_t ov = appstate->overvoltage || is_in_overvoltage_protection;
@@ -345,8 +338,6 @@ void update_state(appstate_t *appstate,
 
 void update_state_powersave(appstate_t *appstate, boolean_t app_timer_elapsed)
 {
-    appstate->discharge_a = FALSE;
-    appstate->discharge_b = FALSE;
     appstate->dynamo_shutoff_enable = FALSE;
     appstate->charge_mode = CHARGE_NONE;
     appstate->is_braking = FALSE;

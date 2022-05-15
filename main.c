@@ -16,24 +16,16 @@
 
 static appstate_t appstate = {
 	.charge_mode = CHARGE_NONE,
-	.discharge_a = FALSE,
-	.discharge_b = FALSE,
 	.light_requested = FALSE,
 	.dynamo_shutoff_enable = FALSE,
 	.charge_a_value = 0,
-	.max_discharge_value = MAX_CHARGE_VALUE - CHARGE_DISCHARGE_SPAN,
 	.charge_state = CHARGE_STATE_NONE,
 	.braking_timing = 0,
 	.is_braking = 0,
-	.avg = 0,
-	.cycle_count = 0,
-	.back_off = 0,
 	.max_charge_a_value = 0,
-	.turn_on_limit = TURN_ON_LIMIT_MAX,
 	.mppt_direction_down = TRUE,
 	.mppt_step_timing = 0,
 	.mppt_step_down_size = MAX_MPPT_STEP,
-	.mppt_step_up_size = MAX_MPPT_STEP,
 	.output_voltage_sum = 0,
 	.output_voltage_measurement_count = 0,
 	.output_voltage_step_before = 0,
@@ -337,8 +329,6 @@ int main(void)
 			// }
 		}
 #ifdef USE_SIMULATION
-		debugstate[1] = appstate.max_discharge_value & 0xFF;
-		debugstate[2] = (appstate.max_discharge_value >> 8) & 0xFF;
 		debugstate[4] = appstate.dynamo_frequency & 0xFF;
 		debugstate[5] = (appstate.dynamo_frequency >> 8) & 0xFF;
 		debugstate[3] = (appstate.output_voltage_measurement_count & 0xFF);
