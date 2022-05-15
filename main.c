@@ -213,7 +213,7 @@ int main(void)
 	io_init();
 	timer2_init();
 	moving_average_init(&appstate.output_voltage_noise_moving_average);
-	appstate.output_voltage_noise_moving_average.calculate_variance = TRUE;
+	appstate.output_voltage_noise_moving_average.calculate_variance = FALSE;
 	apply_state();
 	sei();
 	debug_appstate(&appstate);
@@ -446,16 +446,16 @@ ISR(TIMER2_OVF_vect, ISR_BLOCK)
 			PORTD &= ~(1 << LED_FRONT_OFF_PIN);
 		}
 	}
-	if (mux_changed)
+	if (!app_power_save)
 	{
-		mux_changed = FALSE;
-	}
-	else if ((task_flags & ADC_TASK_FLAG) == 0 && (ADCSRA & (1 << ADSC)) == 0)
-	{
-		adc_measure();
-	}
-	if (pulse_counter > 0)
-	{
+		if (mux_changed)
+		{
+			mux_changed = FALSE;
+		}
+		else if ((task_flags & ADC_TASK_FLAG) == 0 && (ADCSRA & (1 << ADSC)) == 0)
+		{
+			adc_measure();
+		}
 	}
 }
 

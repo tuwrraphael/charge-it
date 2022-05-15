@@ -338,7 +338,5 @@ void update_state(appstate_t *appstate,
 
 void update_state_powersave(appstate_t *appstate, boolean_t app_timer_elapsed)
 {
-    appstate->dynamo_shutoff_enable = FALSE;
-    appstate->charge_mode = CHARGE_NONE;
-    appstate->is_braking = FALSE;
+
 }
