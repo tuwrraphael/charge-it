@@ -10,9 +10,7 @@
 #include "uart_debug.h"
 #include "config.h"
 #include "moving_average.h"
-#include "convert_to_dynamo_rpm.h"
 #include "update_state.h"
-#include "charge_current.h"
 
 static appstate_t appstate = {
 	.charge_mode = CHARGE_NONE,
@@ -322,11 +320,6 @@ int main(void)
 			{
 				app_power_save_count = 0;
 			}
-			// PORTB &= ~(1 << MISO_PIN);
-			// if (appstate.charge_current_measurement_count == 99)
-			// {
-			// OCR1A = 50;
-			// }
 		}
 #ifdef USE_SIMULATION
 		debugstate[4] = appstate.dynamo_frequency & 0xFF;
@@ -334,8 +327,6 @@ int main(void)
 		debugstate[3] = (appstate.output_voltage_measurement_count & 0xFF);
 		debugstate[6] = appstate.output_voltage_sum & 0xFF;
 		debugstate[7] = (appstate.output_voltage_sum >> 8) & 0xFF;
-		// debugstate[8] = appstate.charge_current_measurement_sum & 0xFF;
-		// debugstate[9] = (appstate.charge_current_measurement_sum >> 8) & 0xFF;
 		debugstate[10] = OCR1A & 0xFF;
 		debugstate[11] = (OCR1A >> 8) & 0xFF;
 		debugstate[12] = appstate.output_voltage_step_before & 0xFF;

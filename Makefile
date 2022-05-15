@@ -11,15 +11,10 @@ default: main.txt
 FILES = build/main.o \
 build/uart_debug.o \
 build/moving_average.o \
-build/convert_to_dynamo_rpm.o \
 build/update_state.o \
-build/charge_current.o
 
 TEST_FILES = \
 build/tests/moving_average.o \
-build/tests/convert_to_dynamo_rpm.o \
-build/tests/charge_current.o \
-build/tests/test_charge_current.o \
 build/tests/test_moving_average.o 
 
 CC = avr-gcc
