@@ -29,7 +29,7 @@ TEST_CC = g++
 TEST_LD = g++
 TEST_CFLAGS = -Wall -I /usr/include -I /usr/src/gtest -L /usr/local/lib -lpthread -DF_CPU=$(F_CPU)
 
-CFLAGS = -Wall -Wstrict-prototypes -frename-registers -fshort-enums -fpack-struct -funsigned-char -funsigned-bitfields -std=c99 -Os -DF_CPU=$(F_CPU)UL -mmcu=$(MCU) -DLABBENCH -DDEBUGUART
+CFLAGS = -Wall -Wstrict-prototypes -frename-registers -fshort-enums -fpack-struct -funsigned-char -funsigned-bitfields -std=c99 -Os -DF_CPU=$(F_CPU)UL -mmcu=$(MCU) -DLABBENCH
 LDFLAGS = -Wl,-Map=$(MCU).map,--cref 
 
 ifeq ($(strip $(SIMULATION)),TRUE)

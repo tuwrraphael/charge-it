@@ -14,8 +14,6 @@
 #include "update_state.h"
 #include "charge_current.h"
 
-static moving_average_t deceleration_moving_average;
-
 static appstate_t appstate = {
 	.charge_mode = CHARGE_NONE,
 	.discharge_a = FALSE,
@@ -55,16 +53,18 @@ static volatile uint8_t debugstate[20] __attribute__((section(".mysection")));
 
 static volatile boolean_t last_measurement_b = TRUE;
 
-static uint16_t edge_before = 0;
-static uint16_t frequency_measurement = 0;
+static volatile uint8_t pulse_counter = 0;
+static volatile uint16_t first_pulse_time = 0;
+static volatile uint16_t last_pulse_time = 0;
+static volatile uint8_t repetition_ctr;
+static volatile uint8_t pulses = 0;
+static volatile uint16_t pulses_time = 0;
 
 static volatile uint8_t task_flags;
 
 #define FREQUENCY_MEASUREMENT_TASK_FLAG (1 << 0)
 #define TIMER_TASK_FLAG (1 << 2)
 #define ADC_TASK_FLAG (1 << 3)
-
-static volatile boolean_t edge_before_valid = TRUE;
 
 static boolean_t app_power_save = TRUE;
 static volatile boolean_t leave_power_save_requested = TRUE;
@@ -78,7 +78,7 @@ static void adc_measure(void)
 static void adc_init(void)
 {
 	ADMUX = ADMUX_BASE;
-	ADCSRA = (1 << ADEN) | (1 << ADPS2)| (1 << ADPS1);
+	ADCSRA = (1 << ADEN) | (1 << ADPS2) | (1 << ADPS1);
 	last_measurement_b = TRUE;
 	ADCSRA |= (1 << ADSC);
 	while (ADCSRA & (1 << ADSC))
@@ -218,7 +218,6 @@ int main(void)
 	cli();
 	io_init();
 	timer2_init();
-	moving_average_init(&deceleration_moving_average);
 	moving_average_init(&appstate.output_voltage_noise_moving_average);
 	appstate.output_voltage_noise_moving_average.calculate_variance = TRUE;
 	apply_state();
@@ -259,7 +258,6 @@ int main(void)
 				timer1_init(FALSE);
 				sei();
 				// adc_measure();
-				moving_average_init(&deceleration_moving_average);
 			}
 		}
 		else
@@ -283,14 +281,15 @@ int main(void)
 			read_inputs();
 			if (task_flags & FREQUENCY_MEASUREMENT_TASK_FLAG)
 			{
-				appstate.diff = convert_to_dynamo_rpm(appstate.dynamo_frequency, frequency_measurement);
-				if (appstate.diff < (10 * BRAKE_THRESHOLD_SCALE) && appstate.diff > (0 - (10 * BRAKE_THRESHOLD_SCALE)))
-				{ // discard impossible outliers, 30 equals 12m/s^2 deceleration
-					moving_average_add(&deceleration_moving_average, appstate.diff);
+				if (pulses > 0)
+				{
+					uint32_t denom = (F_CPU / TIMER1_PRESCALER) / pulses_time;
+					appstate.dynamo_frequency = pulses * (uint16_t)denom;
 				}
-
-				appstate.avg = deceleration_moving_average.avg;
-				appstate.dynamo_frequency = frequency_measurement;
+				else
+				{
+					appstate.dynamo_frequency = 0;
+				}
 				ATOMIC_BLOCK(ATOMIC_FORCEON)
 				{
 					task_flags &= ~FREQUENCY_MEASUREMENT_TASK_FLAG;
@@ -349,9 +348,9 @@ int main(void)
 		debugstate[12] = appstate.output_voltage_step_before & 0xFF;
 		debugstate[13] = (appstate.output_voltage_step_before >> 8) & 0xFF;
 		debugstate[14] = appstate.mppt_direction_down;
-		debugstate[15] = appstate.mppt_step_timing & 0xFF;
-		debugstate[16] = (appstate.mppt_step_timing >> 8) & 0xFF;
-		debugstate[17] = appstate.mppt_step_size;
+		debugstate[15] = pulses_time & 0xFF;
+		debugstate[16] = (pulses_time >> 8) & 0xFF;
+		debugstate[17] = pulses;
 #endif
 		if (task_flags == 0)
 		{
@@ -387,22 +386,22 @@ ISR(TIMER1_CAPT_vect, ISR_BLOCK)
 	}
 	else
 	{
-		uint16_t newVal = ICR1L;
-		newVal |= (ICR1H << 8);
-		if (edge_before_valid)
+		last_pulse_time = TCNT1;
+		if (pulse_counter == 0)
 		{
-			if (newVal > edge_before)
-			{
-				frequency_measurement = newVal - edge_before;
-			}
-			else
-			{
-				frequency_measurement = 65535 - edge_before + newVal;
-			}
-			task_flags |= FREQUENCY_MEASUREMENT_TASK_FLAG;
+			first_pulse_time = last_pulse_time;
+			repetition_ctr = 0;
 		}
-		edge_before_valid = TRUE;
-		edge_before = newVal;
+		pulse_counter++;
+		if (repetition_ctr >= FAST_FREQ_MEAS_REVS && pulse_counter > 1)
+		{
+			pulses_time = (TIMER1_TOP - first_pulse_time) + ((repetition_ctr - 1) * TIMER1_TOP) + last_pulse_time;
+			pulses = pulse_counter - 1;
+			task_flags |= FREQUENCY_MEASUREMENT_TASK_FLAG;
+			pulse_counter = 1;
+			first_pulse_time = last_pulse_time;
+			repetition_ctr = 0;
+		}
 	}
 }
 
@@ -432,21 +431,18 @@ ISR(TIMER1_OVF_vect, ISR_BLOCK)
 		appstate.charge_mode = CHARGE_A;
 		PORTC = (PORTC & ~(1 << DISCHARGE_B_OFF_PIN | 1 << CHARGE_B_ON_PIN)) | (1 << DISCHARGE_A_OFF_PIN | 1 << CHARGE_A_ON_PIN);
 	}
+	repetition_ctr++;
+	if (repetition_ctr >= FREQ_MEAS_LIMIT_REVS)
+	{
+		repetition_ctr = 0;
+		pulse_counter = 0;
+		pulses = 0;
+		task_flags |= FREQUENCY_MEASUREMENT_TASK_FLAG;
+	}
 }
-
-static boolean_t pressed;
 
 ISR(TIMER2_OVF_vect, ISR_BLOCK)
 {
-	if (pressed && (PINB & (1 << MOSI_PIN)) == 0)
-	{
-		OCR1A -= 20;
-		if (OCR1A > PWM_DUTY_CYCLE_MAX)
-		{
-			OCR1A = PWM_DUTY_CYCLE_MAX;
-		}
-	}
-	pressed = PINB & (1 << MOSI_PIN);
 	task_flags |= TIMER_TASK_FLAG;
 	if (appstate.light_requested)
 	{
@@ -468,6 +464,9 @@ ISR(TIMER2_OVF_vect, ISR_BLOCK)
 	else if ((task_flags & ADC_TASK_FLAG) == 0 && (ADCSRA & (1 << ADSC)) == 0)
 	{
 		adc_measure();
+	}
+	if (pulse_counter > 0)
+	{
 	}
 }
 

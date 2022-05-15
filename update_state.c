@@ -21,7 +21,7 @@ static boolean_t is_driving(appstate_t *appstate)
 static boolean_t is_driving_fast(appstate_t *appstate)
 {
 #ifndef LABBENCH
-    return appstate->dynamo_frequency < DYNAMO_FREQUENCY_DRIVING;
+    return appstate->dynamo_frequency > DYNAMO_FREQUENCY_DRIVING;
 #else
     return TRUE;
 #endif

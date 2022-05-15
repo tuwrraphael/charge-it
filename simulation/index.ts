@@ -206,7 +206,7 @@ export class Runner {
     readonly adc: AVRADC;
     private time = 0;
     private lastChartUpdate = 0;
-    private dynamoPeriod: number;
+    private dynamoPeriod: number = 0.1;
     private dynamoPosition = 0;
     private dynamoVoltage = 0;
     dynamoFrequency = 0;
@@ -230,10 +230,15 @@ export class Runner {
 
     setSpeed(kmh: number) {
         this.dynamoFrequency = (16.324 * kmh - 2e-13);
+        let newPeriod = (1 / this.dynamoFrequency);
+        let adjustPosition = newPeriod / this.dynamoPeriod;
+        this.dynamoPosition *= adjustPosition;
+        this.dynamoPosition = this.dynamoPosition % newPeriod;
+        this.dynamoPeriod = newPeriod;
     }
 
     simulateTimesteps(nr: number) {
-        this.dynamoPeriod = (1 / this.dynamoFrequency);
+
         for (let i = 0; i < nr; i++) {
             var cycles = this.cpu.cycles;
             avrInstruction(this.cpu);
@@ -285,7 +290,7 @@ export class Runner {
         this.resistorCurrent = this.outputCapacitorVoltage / r;
         this.outputCapacitorCurrent = -1 * this.resistorCurrent;
 
-        let dischargeR = 0.4 + 2* capacitorESR;
+        let dischargeR = 0.4 + 2 * capacitorESR;
         if (dischargeA && dischargeB) {
             // throw "discharging both!";
         }
