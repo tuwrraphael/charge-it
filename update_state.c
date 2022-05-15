@@ -4,10 +4,8 @@
 #include "app_state.h"
 #include "config.h"
 #include "moving_average.h"
-#ifdef LABBENCH
 #include "pinout.h"
 #include <avr/io.h>
-#endif
 
 static boolean_t is_driving(appstate_t *appstate)
 {
@@ -124,6 +122,32 @@ void update_state(appstate_t *appstate,
                 appstate->limits_exceeded--;
             }
             appstate->max_charge_a_value = 0;
+        }
+        if (appstate->is_braking > 0)
+        {
+            appstate->is_braking--;
+        }
+        if (appstate->braking_timing < BRAKING_TIMING)
+        {
+            appstate->braking_timing++;
+        }
+        else
+        {
+            debug_uint16(appstate->dynamo_frequency, appstate->is_braking);
+            appstate->braking_timing = 0;
+            int16_t frequency_diff = appstate->dynamo_frequency_before - appstate->dynamo_frequency;
+            if (frequency_diff > 4)
+            {
+                if (appstate->speed_falling_ctr > 2) {
+                appstate->is_braking = BRAKE_LIGHT_TIMING;
+                }
+                else {
+                    appstate->speed_falling_ctr++;
+                }
+            } else {
+                appstate->speed_falling_ctr = 0;
+            }
+            appstate->dynamo_frequency_before = appstate->dynamo_frequency;
         }
     }
 
@@ -337,22 +361,13 @@ void update_state(appstate_t *appstate,
             appstate->output_voltage_step_before = appstate->output_voltage_noise_moving_average.avg;
         }
         moving_average_add(&appstate->output_voltage_noise_moving_average, appstate->output_voltage_sum);
-        debug_appstate(appstate);
+        // debug_appstate(appstate);
         appstate->output_voltage_sum = 0;
     }
 
     appstate->dynamo_shutoff_enable = driving_below_danger_voltage(appstate);
 
     update_driving_state(appstate, app_timer_elapsed);
-
-    if (appstate->avg > BRAKING_THRESHOLD)
-    {
-        appstate->is_braking = BRAKE_LIGHT_TIMING;
-    }
-    else if (app_timer_elapsed && appstate->is_braking > 0)
-    {
-        appstate->is_braking--;
-    }
 
     if (app_timer_elapsed && appstate->mppt_step_timing < MPPT_STEP)
     {

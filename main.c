@@ -23,6 +23,7 @@ static appstate_t appstate = {
 	.charge_a_value = 0,
 	.max_discharge_value = MAX_CHARGE_VALUE - CHARGE_DISCHARGE_SPAN,
 	.driving_state = DRIVING_STATE_STOPPED,
+	.braking_timing = 0,
 	.is_braking = 0,
 	.avg = 0,
 	.driving_state_timing = 0,
@@ -43,7 +44,8 @@ static appstate_t appstate = {
 	.last_search_result = PWM_DUTY_CYCLE_MAX,
 	.scan_mode = TRUE,
 	.overvoltage_timing = 0,
-	.limits_exceeded = 0};
+	.limits_exceeded = 0,
+	.speed_falling_ctr = 0};
 
 #ifdef USE_SIMULATION
 static volatile uint8_t debugstate[20] __attribute__((section(".mysection")));
@@ -56,7 +58,9 @@ static volatile boolean_t last_measurement_b = TRUE;
 static volatile uint8_t pulse_counter = 0;
 static volatile uint16_t first_pulse_time = 0;
 static volatile uint16_t last_pulse_time = 0;
-static volatile uint8_t repetition_ctr;
+static volatile uint8_t last_pulse_repetition = 0;
+static volatile uint8_t first_pulse_repetition = 0;
+static volatile int16_t repetition_ctr;
 static volatile uint8_t pulses = 0;
 static volatile uint16_t pulses_time = 0;
 
@@ -348,9 +352,9 @@ int main(void)
 		debugstate[12] = appstate.output_voltage_step_before & 0xFF;
 		debugstate[13] = (appstate.output_voltage_step_before >> 8) & 0xFF;
 		debugstate[14] = appstate.mppt_direction_down;
-		debugstate[15] = pulses_time & 0xFF;
-		debugstate[16] = (pulses_time >> 8) & 0xFF;
-		debugstate[17] = pulses;
+		debugstate[15] = appstate.is_braking & 0xFF;
+		debugstate[16] = (appstate.is_braking >> 8) & 0xFF;
+		debugstate[17] = appstate.mppt_step_down_size;
 #endif
 		if (task_flags == 0)
 		{
@@ -386,22 +390,18 @@ ISR(TIMER1_CAPT_vect, ISR_BLOCK)
 	}
 	else
 	{
-		last_pulse_time = TCNT1;
+		last_pulse_time = ICR1;
+#ifdef USE_SIMULATION
+		last_pulse_repetition = (last_pulse_time < TIMER1_TOP / 2 && TIFR1 & (1 << TOV1)) ? repetition_ctr + 1 : repetition_ctr;
+#else
+		last_pulse_repetition = (last_pulse_time < TIMER1_TOP / 2 && TIFR & (1 << TOV1)) ? repetition_ctr + 1 : repetition_ctr;
+#endif
 		if (pulse_counter == 0)
 		{
 			first_pulse_time = last_pulse_time;
-			repetition_ctr = 0;
+			first_pulse_repetition = last_pulse_repetition;
 		}
 		pulse_counter++;
-		if (repetition_ctr >= FAST_FREQ_MEAS_REVS && pulse_counter > 1)
-		{
-			pulses_time = (TIMER1_TOP - first_pulse_time) + ((repetition_ctr - 1) * TIMER1_TOP) + last_pulse_time;
-			pulses = pulse_counter - 1;
-			task_flags |= FREQUENCY_MEASUREMENT_TASK_FLAG;
-			pulse_counter = 1;
-			first_pulse_time = last_pulse_time;
-			repetition_ctr = 0;
-		}
 	}
 }
 
@@ -432,7 +432,16 @@ ISR(TIMER1_OVF_vect, ISR_BLOCK)
 		PORTC = (PORTC & ~(1 << DISCHARGE_B_OFF_PIN | 1 << CHARGE_B_ON_PIN)) | (1 << DISCHARGE_A_OFF_PIN | 1 << CHARGE_A_ON_PIN);
 	}
 	repetition_ctr++;
-	if (repetition_ctr >= FREQ_MEAS_LIMIT_REVS)
+	if (repetition_ctr >= FAST_FREQ_MEAS_REVS && pulse_counter > 1)
+	{
+		repetition_ctr = 0;
+		uint16_t repetitions = last_pulse_repetition - first_pulse_repetition - 1;
+		pulses_time = (TIMER1_TOP - first_pulse_time) + (repetitions * TIMER1_TOP) + last_pulse_time;
+		pulses = pulse_counter - 1;
+		task_flags |= FREQUENCY_MEASUREMENT_TASK_FLAG;
+		pulse_counter = 0;
+	}
+	else if (repetition_ctr >= FREQ_MEAS_LIMIT_REVS)
 	{
 		repetition_ctr = 0;
 		pulse_counter = 0;

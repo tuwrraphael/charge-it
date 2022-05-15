@@ -43,7 +43,10 @@ typedef struct
     driving_state_t driving_state;
     int16_t diff;
     int16_t avg;
+    uint16_t braking_timing;
     uint16_t is_braking;
+    uint8_t speed_falling_ctr;
+    uint16_t dynamo_frequency_before;
 
     uint16_t driving_state_timing;
 

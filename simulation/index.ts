@@ -55,7 +55,8 @@ const myChart = new Chart(ctx, {
             borderColor: "#000077",
             backgroundColor: "#000077",
             data: [],
-            pointRadius: 0
+            pointRadius: 0,
+            hidden: true
         }, {
             label: "Capacitor Discharge Current",
             borderColor: "#FF0000",
@@ -77,7 +78,7 @@ const myChart = new Chart(ctx, {
             pointRadius: 0
         },
         {
-            label: "Dynamo Frequency",
+            label: "Dynamo Waveform",
             borderColor: "#000000",
             backgroundColor: "#000000",
             data: [],
@@ -117,6 +118,14 @@ const myChart = new Chart(ctx, {
             backgroundColor: "darkgreen",
             data: [],
             pointRadius: 0
+        },
+        {
+            label: "Dynamo Frequency reading",
+            borderColor: "violetta",
+            backgroundColor: "violetta",
+            data: [],
+            pointRadius: 0,
+            hidden: true
         }
         ],
         labels: []
@@ -318,7 +327,7 @@ export class Runner {
     }
 
     private updateChart() {
-
+        let appState = this.getAppstate();
         myChart.data.datasets[0].data.push(voltageA);
         myChart.data.datasets[1].data.push(voltageB);
         myChart.data.datasets[2].data.push(dischargeCurrentA + dischargeCurrentB);
@@ -344,6 +353,7 @@ export class Runner {
             avgPower = myChart.data.datasets[10].data.slice(-avgPowerDataPoints).reduce((a, b) => a + b, 0) / avgPowerDataPoints;
         }
         myChart.data.datasets[4].data.push(avgPower);
+        myChart.data.datasets[11].data.push(appState.dynamoFrequency);
 
         var length = myChart.data.labels.length;
         for (let d of myChart.data.datasets) {
@@ -416,7 +426,7 @@ export class Runner {
             tcnt1: this.timer1.debugTCNT,
             power: this.cpu.dataView.getUint16(baseAddress + 12, true),
             mpptDirection: this.cpu.dataView.getUint8(baseAddress + 14) > 0 ? "down" : "up",
-            mpptStepTiming: this.cpu.dataView.getUint16(baseAddress + 15, true),
+            isBraking: this.cpu.dataView.getUint16(baseAddress + 15, true),
             mpptStepSize: this.cpu.dataView.getUint8(baseAddress + 17),
         }
         if (x.ocr1a != this.ocra1) {
@@ -451,7 +461,7 @@ function applyState() {
     document.querySelector("#tcnt1").innerText = state.tcnt1;
     document.querySelector("#power").innerText = state.power;
     document.querySelector("#mpptDirection").innerText = state.mpptDirection;
-    document.querySelector("#mpptStepTiming").innerText = state.mpptStepTiming;
+    document.querySelector("#isBraking").innerText = state.isBraking;
     document.querySelector("#mpptStepSize").innerText = state.mpptStepSize;
 }
 
